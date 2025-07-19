@@ -1,2 +1,0 @@
-# JastipKuy
-application java web
