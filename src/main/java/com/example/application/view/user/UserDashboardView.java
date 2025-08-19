@@ -46,7 +46,6 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
     private final LaporanDAO laporanDAO = new LaporanDAO();
 
     // State
-    private Integer userId;
     private User currentUser;
 
     // Formatter
@@ -70,6 +69,11 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
         setPadding(false);
         setSpacing(false);
         getStyle().set("overflow", "hidden"); // Prevent double scroll
+        Integer userId = SessionUtils.getUserId();
+        if (userId == null) {
+            UI.getCurrent().navigate("login");
+            return;
+        }
 
 
         // UI Structure
@@ -177,8 +181,9 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
                 .set("padding", "12px 16px")
                 .set("border-top", "1px solid #334155");
         logoutBtn.addClickListener(e -> {
-            VaadinSession.getCurrent().setAttribute("idUser", null);
+            SessionUtils.clearSession();
             UI.getCurrent().navigate("login");
+
         });
 
         sidebar.add(logoLayout, profileLayout, menuLayout, logoutBtn);
@@ -275,6 +280,7 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
     }
 
     private Div buildDataSection() {
+        Integer userId = SessionUtils.getUserId();
         Div wrap = new Div();
         wrap.setWidthFull();
         wrap.getStyle().set("padding", "24px");
@@ -371,6 +377,7 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
     }
 
     private Div buildOrderSection() {
+        Integer userId = SessionUtils.getUserId();
         Div wrap = new Div();
         wrap.setWidthFull();
         wrap.getStyle().set("padding", "24px");
@@ -536,6 +543,8 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
     }
 
     private Component buildActiveCard() {
+        Integer userId = SessionUtils.getUserId();
+
         Div card = new Div();
         card.getStyle()
                 .set("padding", "24px")
@@ -596,6 +605,8 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
     }
 
     private void setupHistoryGrid(Grid<Titipan> grid) {
+        Integer userId = SessionUtils.getUserId();
+
         grid.removeAllColumns();
         grid.addColumn(Titipan::getId)
                 .setHeader("ID")
@@ -644,6 +655,8 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
     }
 
     private void reloadHomeAndHistory() {
+        Integer userId = SessionUtils.getUserId();
+
         // Rebuild Home section
         int idxHome = contentWrap.indexOf(homeSection);
         if (idxHome >= 0) {
@@ -690,6 +703,8 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
     }
 
     private void openRatingDialog(Titipan t) {
+        Integer userId = SessionUtils.getUserId();
+
         Dialog dialog = new Dialog();
         dialog.setWidth("500px");
 
@@ -737,29 +752,31 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
         dialog.open();
     }
 
-    private String formatRupiah(Long amount) {
-        if (amount == null) return "-";
-        return rupiah.format(amount).replace(",00", "");
-    }
-
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
         Integer userId = SessionUtils.getUserId();
         String userRole = SessionUtils.getUserRole();
 
-        if (userId != null) {
-            if (!"Penitip".equalsIgnoreCase(userRole)) {
-                if ("Admin".equalsIgnoreCase(userRole)) {
-                    event.forwardTo("admin");
-                } else if ("Jastiper".equalsIgnoreCase(userRole)) {
-                    event.forwardTo("jastiper");
-                } else {
-                    event.forwardTo(""); // fallback ke home
-                }
-            }
-        } else {
-            event.forwardTo("login");
+        if (userId == null) {
+            event.rerouteTo("login"); // belum login, balik ke login
+            return;
         }
+
+        if (!"Penitip".equalsIgnoreCase(userRole)) {
+            if ("Admin".equalsIgnoreCase(userRole)) {
+                event.rerouteTo("admin");
+            } else if ("Jastiper".equalsIgnoreCase(userRole)) {
+                event.rerouteTo("jastiper");
+            } else {
+                event.rerouteTo(""); // fallback ke home
+            }
+        }
+    }
+
+
+    private String formatRupiah(Long amount) {
+        if (amount == null) return "-";
+        return rupiah.format(amount).replace(",00", "");
     }
 
 }

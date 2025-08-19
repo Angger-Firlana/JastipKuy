@@ -53,26 +53,7 @@ public class AdminView extends VerticalLayout {
     private Grid<Titipan> titipanGrid = new Grid<>();
 
     public AdminView() {
-        Integer userId = SessionUtils.getUserId();
-        String userRole = SessionUtils.getUserRole();
-        if (userId != null){
-            if (!Objects.equals(userRole, "Admin")){
-                if (userRole.equals("Jastiper")){
-                    UI.getCurrent().navigate("jastiper");
-                    return;
-                }else if(userRole.equals("Penitip")){
-                    UI.getCurrent().navigate("user");
-                    return;
-                }else{
-                    UI.getCurrent().navigate("");
-                    return;
-                }
-            }
-        }else{
-            UI.getCurrent().navigate("login");
-        }
         try {
-
             initializeView();
         } catch (Exception e) {
             showErrorView(e);
@@ -861,8 +842,9 @@ public class AdminView extends VerticalLayout {
     // Event Handlers
     private void handleLogout() {
         try {
-            VaadinSession.getCurrent().getSession().invalidate();
+            SessionUtils.clearSession();
             UI.getCurrent().navigate("login");
+
         } catch (Exception e) {
             showNotification("Error saat logout: " + e.getMessage(), NotificationVariant.LUMO_ERROR);
         }
@@ -972,6 +954,8 @@ public class AdminView extends VerticalLayout {
         else if (hours < 24) return hours + " jam lalu";
         else return days + " hari lalu";
     }
+
+
 
 
 

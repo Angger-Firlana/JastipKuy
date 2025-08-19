@@ -32,7 +32,7 @@ import java.util.stream.IntStream;
 @PageTitle("JastipKuy • Dashboard")
 @Route("jastiper")
 @Uses(Icon.class)
-public class JastiperView extends Div implements BeforeEnterObserver {
+public class JastiperView extends Div{
     private final TitipanDAO titipanDAO = new TitipanDAO();
     private final TitipanDetailDAO detailDAO = new TitipanDetailDAO();
     private final UserDAO userDAO = new UserDAO();
@@ -89,6 +89,11 @@ public class JastiperView extends Div implements BeforeEnterObserver {
         Icon bell = VaadinIcon.BELL.create(); bell.setColor(WHITE); bell.setSize("20px");
         Button logout = new Button("Logout", VaadinIcon.SIGN_OUT.create()); stylePrimary(logout);
         topRight.add(bell, logout);
+
+        logout.addClickListener(ce -> {
+           SessionUtils.clearSession();
+           UI.getCurrent().navigate("login");
+        });
 
         topBar.add(brand, topRight);
 
@@ -476,26 +481,6 @@ public class JastiperView extends Div implements BeforeEnterObserver {
                 new Ulasan("#1014", "Budi", 5, "Mantap sesuai request.", LocalDate.now().minusDays(2)),
                 new Ulasan("#1015", "Maya", 3, "Sedikit telat tapi oke.", LocalDate.now().minusDays(1))
         );
-    }
-
-    @Override
-    public void beforeEnter(BeforeEnterEvent event) {
-        Integer userId = SessionUtils.getUserId();
-        String userRole = SessionUtils.getUserRole();
-
-        if (userId != null) {
-            if (!"Jastiper".equalsIgnoreCase(userRole)) {
-                if ("Admin".equalsIgnoreCase(userRole)) {
-                    event.forwardTo("admin");
-                } else if ("Penitip".equalsIgnoreCase(userRole)) {
-                    event.forwardTo("user");
-                } else {
-                    event.forwardTo(""); // fallback ke home
-                }
-            }
-        } else {
-            event.forwardTo("login");
-        }
     }
 
     // ------------------- MODELS -------------------
