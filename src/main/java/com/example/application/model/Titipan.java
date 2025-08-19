@@ -9,6 +9,8 @@ public class Titipan {
     private String nama_barang;
     private Long harga_estimasi;
     private String status;
+    private String lokasi_jemput;
+    private String lokasi_antar;
     private Integer diambil_oleh;
     private Date created_at;
 
@@ -72,4 +74,19 @@ public class Titipan {
         this.created_at = created_at;
     }
 
+    public String getLokasi_jemput() {
+        return lokasi_jemput;
+    }
+
+    public void setLokasi_jemput(String lokasi_jemput) {
+        this.lokasi_jemput = lokasi_jemput;
+    }
+
+    public String getLokasi_antar() {
+        return lokasi_antar;
+    }
+
+    public void setLokasi_antar(String lokasi_antar) {
+        this.lokasi_antar = lokasi_antar;
+    }
 }

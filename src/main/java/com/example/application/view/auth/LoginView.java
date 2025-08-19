@@ -2,6 +2,7 @@ package com.example.application.view.auth;
 
 import com.example.application.dao.UserDAO;
 import com.example.application.model.User;
+import com.example.application.session.SessionUtils;
 import com.vaadin.flow.component.ClickEvent;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
@@ -14,13 +15,15 @@ import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
 
 @Route("login")
 @PageTitle("Login | Jastip Kuy")
-public class LoginView extends VerticalLayout {
+public class LoginView extends VerticalLayout implements BeforeEnterObserver {
 
     UserDAO userDAO = new UserDAO();
     TextField emailField;
@@ -109,15 +112,22 @@ public class LoginView extends VerticalLayout {
             int idUser = userDAO.login(emailField.getValue(), passwordField.getValue());
             if (idUser != 0) {
                 // simpan id di session (nama key sama seperti MainLayout)
-                VaadinSession.getCurrent().setAttribute("idUser", idUser);
+                SessionUtils.setUserId(idUser);
 
                 // ambil role untuk routing
                 User u = userDAO.getUserById(idUser);
                 if (u != null && "ADMIN".equalsIgnoreCase(u.getRole())) {
+                    SessionUtils.setUserRole(u.getRole());
                     UI.getCurrent().navigate("admin");
-                } else {
+                } else if (u != null && "Penitip".equalsIgnoreCase(u.getRole())){
+                    SessionUtils.setUserRole(u.getRole());
                     UI.getCurrent().navigate("user"); // <-- view user (kita buat di langkah 4)
+                }else {
+                    assert u != null;
+                    SessionUtils.setUserRole(u.getRole());
+                    UI.getCurrent().navigate("jastiper");
                 }
+
             } else {
                 Notification.show("Email atau password salah!", 3000, Notification.Position.MIDDLE);
             }
@@ -126,6 +136,30 @@ public class LoginView extends VerticalLayout {
             Notification.show("Terjadi kesalahan saat login!", 3000, Notification.Position.MIDDLE);
         }
     }
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        Integer idUser = SessionUtils.getUserId();
+        String role = SessionUtils.getUserRole();
+
+        if (idUser != null && role != null) {
+            switch (role.toUpperCase()) {
+                case "ADMIN":
+                    event.forwardTo("admin");
+                    break;
+                case "PENITIP":
+                    event.forwardTo("user");
+                    break;
+                case "JASTIPER":
+                    event.forwardTo("jastiper");
+                    break;
+                default:
+                    event.forwardTo(""); // fallback ke home
+                    break;
+            }
+        }
+    }
 }
+
+
 
 

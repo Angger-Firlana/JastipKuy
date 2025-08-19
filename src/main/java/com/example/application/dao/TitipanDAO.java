@@ -51,6 +51,24 @@ public class TitipanDAO {
         return titipList;
     }
 
+    public ArrayList<Titipan> getAllTitipanJastiper(String name) {
+        ArrayList<Titipan> titipList = new ArrayList<>();
+        String query = "SELECT * FROM titipan WHERE " +
+                "user_id IN (SELECT id FROM users WHERE name LIKE ?) and status = 'MENUNGGU'" +
+                "ORDER BY created_at DESC";
+        try (PreparedStatement stmt = conn.prepareStatement(query)) {
+            String keyword = "%" + name + "%";
+            stmt.setString(1, keyword);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                titipList.add(mapRow(rs));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return titipList;
+    }
+
     public int getOrderCountThisMonth() {
         String query = "SELECT COUNT(*) FROM titipan " +
                 "WHERE MONTH(created_at) = MONTH(CURRENT_DATE()) " +
@@ -107,28 +125,65 @@ public class TitipanDAO {
     }
 
     public boolean updateTitipan(Titipan data) {
-        String query = "UPDATE titipan SET user_id=?, status=?, harga_estimasi=?, created_at=?, diambil_oleh=? WHERE id=?";
-        try {
-            ps = conn.prepareStatement(query);
-            ps.setInt(1, data.getUser_id());
-            ps.setString(2, data.getStatus());
-            ps.setLong(3, data.getHarga_estimasi());
-            ps.setTimestamp(4, new Timestamp(data.getCreated_at().getTime()));
+        boolean status = false;
+        StringBuilder query = new StringBuilder("UPDATE titipan SET ");
+        List<Object> values = new ArrayList<>();
+        List<Integer> types = new ArrayList<>();
 
-            // HANDLE NULL untuk diambil_oleh
-            if (data.getDiambil_oleh() == null || data.getDiambil_oleh() == 0) {
-                ps.setNull(5, Types.INTEGER);
-            } else {
-                ps.setInt(5, data.getDiambil_oleh());
+        if (data.getUser_id() != null && data.getUser_id() != 0) {
+            query.append("user_id=?, ");
+            values.add(data.getUser_id());
+            types.add(Types.INTEGER);
+        }
+
+        if (data.getStatus() != null) {
+            query.append("status=?, ");
+            values.add(data.getStatus());
+            types.add(Types.VARCHAR);
+        }
+
+        if (data.getHarga_estimasi() != null && data.getHarga_estimasi() != 0) {
+            query.append("harga_estimasi=?, ");
+            values.add(data.getHarga_estimasi());
+            types.add(Types.BIGINT);
+        }
+
+        if (data.getCreated_at() != null) {
+            query.append("created_at=?, ");
+            values.add(new Timestamp(data.getCreated_at().getTime()));
+            types.add(Types.TIMESTAMP);
+        }
+
+        if (data.getDiambil_oleh() != null && data.getDiambil_oleh() != 0) {
+            query.append("diambil_oleh=?, ");
+            values.add(data.getDiambil_oleh());
+            types.add(Types.INTEGER);
+        }
+
+        // hapus koma terakhir
+        if (query.toString().endsWith(", ")) {
+            query.setLength(query.length() - 2);
+        }
+
+        query.append(" WHERE id=?");
+        values.add(data.getId());
+        types.add(Types.INTEGER);
+
+        try (PreparedStatement ps = conn.prepareStatement(query.toString())) {
+            for (int i = 0; i < values.size(); i++) {
+                if (values.get(i) == null) {
+                    ps.setNull(i + 1, types.get(i));
+                } else {
+                    ps.setObject(i + 1, values.get(i));
+                }
             }
-
-            ps.setInt(6, data.getId());
-            return ps.executeUpdate() > 0;
+            status = ps.executeUpdate() > 0;
         } catch (SQLException e) {
             System.out.println("Update Titipan Error: " + e.getMessage());
         }
-        return false;
+        return status;
     }
+
 
     public List<Titipan> getLastTitipan(int limit) {
         List<Titipan> list = new ArrayList<>();

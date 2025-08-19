@@ -2,6 +2,7 @@ package com.example.application.view.auth;
 
 import com.example.application.dao.UserDAO;
 import com.example.application.model.User;
+import com.example.application.session.SessionUtils;
 import com.vaadin.flow.component.ClickEvent;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
@@ -14,12 +15,14 @@ import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.radiobutton.RadioButtonGroup;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 
 @Route("register")
 @PageTitle("Register | Jastip Kuy")
-public class RegisterView extends VerticalLayout {
+public class RegisterView extends VerticalLayout implements BeforeEnterObserver {
 
     UserDAO userDAO = new UserDAO();
 
@@ -113,6 +116,7 @@ public class RegisterView extends VerticalLayout {
                 .set("text-decoration", "underline")
                 .set("cursor", "pointer");
 
+
         Anchor homeLink = new Anchor("", "Back to home");
         homeLink.getStyle()
                 .set("font-size", "12px")
@@ -120,7 +124,7 @@ public class RegisterView extends VerticalLayout {
                 .set("text-decoration", "underline")
                 .set("cursor", "pointer");
 
-        formLayout.add(title, nisnField, nameField, emailField, passwordField, roleGroup, registerButton, homeLink, homeLink);
+        formLayout.add(title, nisnField, nameField, emailField, passwordField, roleGroup, registerButton, loginLink, homeLink);
 
         mainContainer.add(leftPane, formLayout);
         add(mainContainer);
@@ -154,6 +158,29 @@ public class RegisterView extends VerticalLayout {
         } catch (Exception e) {
             e.printStackTrace();
             Notification.show("Gagal registrasi. Coba lagi!", 3000, Notification.Position.MIDDLE);
+        }
+    }
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        Integer idUser = SessionUtils.getUserId();
+        String role = SessionUtils.getUserRole();
+
+        if (idUser != null && role != null) {
+            switch (role.toUpperCase()) {
+                case "ADMIN":
+                    event.forwardTo("admin");
+                    break;
+                case "PENITIP":
+                    event.forwardTo("user");
+                    break;
+                case "JASTIPER":
+                    event.forwardTo("jastiper");
+                    break;
+                default:
+                    event.forwardTo(""); // fallback ke home
+                    break;
+            }
         }
     }
 }

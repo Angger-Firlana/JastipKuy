@@ -6,6 +6,7 @@ import com.example.application.dao.UserDAO;
 import com.example.application.model.Titipan;
 import com.example.application.model.TitipanDetail;
 import com.example.application.model.User;
+import com.example.application.session.SessionUtils;
 import com.example.application.view.main.MainLayout;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.Text;
@@ -38,10 +39,7 @@ import com.vaadin.flow.theme.lumo.LumoUtility;
 
 import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Date;
+import java.util.*;
 
 
 @Route(value = "admin")
@@ -55,7 +53,26 @@ public class AdminView extends VerticalLayout {
     private Grid<Titipan> titipanGrid = new Grid<>();
 
     public AdminView() {
+        Integer userId = SessionUtils.getUserId();
+        String userRole = SessionUtils.getUserRole();
+        if (userId != null){
+            if (!Objects.equals(userRole, "Admin")){
+                if (userRole.equals("Jastiper")){
+                    UI.getCurrent().navigate("jastiper");
+                    return;
+                }else if(userRole.equals("Penitip")){
+                    UI.getCurrent().navigate("user");
+                    return;
+                }else{
+                    UI.getCurrent().navigate("");
+                    return;
+                }
+            }
+        }else{
+            UI.getCurrent().navigate("login");
+        }
         try {
+
             initializeView();
         } catch (Exception e) {
             showErrorView(e);

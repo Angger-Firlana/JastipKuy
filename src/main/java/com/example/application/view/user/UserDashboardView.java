@@ -1,566 +1,765 @@
-// MainLayout.java
 package com.example.application.view.user;
 
-import com.vaadin.flow.component.applayout.AppLayout;
-import com.vaadin.flow.component.applayout.DrawerToggle;
-import com.vaadin.flow.component.avatar.Avatar;
+import com.example.application.dao.*;
+import com.example.application.model.Titipan;
+import com.example.application.model.TitipanDetail;
+import com.example.application.model.User;
+import com.example.application.session.SessionUtils;
+import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.UI;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.dialog.Dialog;
+import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.*;
+import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
+import com.vaadin.flow.component.notification.Notification;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
-import com.vaadin.flow.component.orderedlayout.Scroller;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
-import com.vaadin.flow.component.sidenav.SideNav;
-import com.vaadin.flow.component.sidenav.SideNavItem;
+import com.vaadin.flow.component.textfield.NumberField;
+import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.router.BeforeEnterEvent;
+import com.vaadin.flow.router.BeforeEnterObserver;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
-import com.vaadin.flow.theme.lumo.LumoUtility;
+import com.vaadin.flow.server.VaadinSession;
+
+import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.util.*;
 
 @Route("user")
-@PageTitle("JASTIPKUY")
-public class UserDashboardView extends AppLayout {
+@PageTitle("Dashboard User | JastipKuy")
+public class UserDashboardView extends HorizontalLayout implements BeforeEnterObserver {
 
-    private H2 viewTitle;
+    // DAO
+    private final TitipanDAO titipanDAO = new TitipanDAO();
+    private final TitipanDetailDAO detailDAO = new TitipanDetailDAO();
+    private final UserDAO userDAO = new UserDAO();
+    private final RatingDAO ratingDAO = new RatingDAO();
+    private final LaporanDAO laporanDAO = new LaporanDAO();
+
+    // State
+    private Integer userId;
+    private User currentUser;
+
+    // Formatter
+    private final Locale ID = new Locale("id","ID");
+    private final SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy HH:mm", ID);
+    private final NumberFormat rupiah = NumberFormat.getCurrencyInstance(ID);
+
+    // Sidebar buttons
+    private Button homeBtn, dataBtn, orderBtn, riwayatBtn;
+
+    // Sections
+    private VerticalLayout contentWrap;
+    private Div homeSection, dataSection, orderSection, riwayatSection;
+
+    // Grids
+    private Grid<Titipan> historyGridHome = new Grid<>(Titipan.class, false);
+    private Grid<Titipan> historyGridFull = new Grid<>(Titipan.class, false);
 
     public UserDashboardView() {
-        setPrimarySection(Section.DRAWER);
-        addDrawerContent();
-        addHeaderContent();
+        setSizeFull();
+        setPadding(false);
+        setSpacing(false);
+        getStyle().set("overflow", "hidden"); // Prevent double scroll
+
+
+        // UI Structure
+        VerticalLayout sidebar = buildSidebar();
+        contentWrap = new VerticalLayout();
+        contentWrap.setSizeFull();
+        contentWrap.setPadding(false);
+        contentWrap.getStyle()
+                .set("margin-left", "250px")
+                .set("background-color", "#f8fafc")
+                .set("min-height", "100vh");
+
+        // Build all sections
+        homeSection = buildHomeSection();
+        dataSection = buildDataSection();
+        orderSection = buildOrderSection();
+        riwayatSection = buildRiwayatSection();
+
+        // Default: HOME
+        contentWrap.add(homeSection, dataSection, orderSection, riwayatSection);
+        showSection("HOME");
+
+        add(sidebar, contentWrap);
     }
 
-    private void addHeaderContent() {
-        DrawerToggle toggle = new DrawerToggle();
-        toggle.setAriaLabel("Menu toggle");
+    /* ========================= Sidebar ========================= */
+    private VerticalLayout buildSidebar() {
+        VerticalLayout sidebar = new VerticalLayout();
+        sidebar.setWidth("250px");
+        sidebar.setHeight("100vh");
+        sidebar.setPadding(false);
+        sidebar.setSpacing(false);
+        sidebar.getStyle()
+                .set("position", "fixed")
+                .set("top", "0")
+                .set("left", "0")
+                .set("background-color", "#1e293b")
+                .set("color", "white")
+                .set("box-shadow", "2px 0 10px rgba(0,0,0,0.1)");
 
-        viewTitle = new H2();
-        viewTitle.addClassNames(LumoUtility.FontSize.LARGE, LumoUtility.Margin.NONE);
-
-        // Logout button positioned on the right
-        var logoutButton = new Span("Logout");
-        logoutButton.addClassNames("logout-btn");
-        logoutButton.getStyle().set("cursor", "pointer");
-        logoutButton.getStyle().set("color", "white");
-        logoutButton.getStyle().set("margin-right", "20px");
-
-        var header = new HorizontalLayout(toggle, viewTitle);
-        header.setDefaultVerticalComponentAlignment(FlexComponent.Alignment.CENTER);
-        header.setWidthFull();
-        header.addClassNames(LumoUtility.Padding.Vertical.NONE, LumoUtility.Padding.Horizontal.MEDIUM);
-
-        // Add logout to the end
-        header.add(logoutButton);
-        header.setJustifyContentMode(FlexComponent.JustifyContentMode.BETWEEN);
-
-        addToNavbar(header);
-
-        // Custom CSS for header styling
-        getElement().getStyle().set("--vaadin-app-layout-navbar-background", "#2c5282");
-    }
-
-    private void addDrawerContent() {
-        // Logo and title
-        var logoLayout = new HorizontalLayout();
+        // Logo section
+        HorizontalLayout logoLayout = new HorizontalLayout();
         logoLayout.setAlignItems(FlexComponent.Alignment.CENTER);
         logoLayout.setPadding(true);
-        logoLayout.getStyle().set("background-color", "#2c5282");
-        logoLayout.getStyle().set("color", "white");
+        logoLayout.setSpacing(true);
+        logoLayout.setWidthFull();
 
-        var logo = new Span("✈");
-        logo.getStyle().set("font-size", "24px");
-        logo.getStyle().set("margin-right", "8px");
+        Image logoImg = new Image("logo.png", "JastipKuy");
+        logoImg.setHeight("32px");
+        H3 logoText = new H3("JASTIPKUY");
+        logoText.getStyle()
+                .set("color", "white")
+                .set("margin", "0")
+                .set("font-size", "18px")
+                .set("font-weight", "600");
+        logoLayout.add(logoImg, logoText);
 
-        var title = new Span("JASTIPKUY");
-        title.getStyle().set("font-weight", "bold");
-        title.getStyle().set("font-size", "18px");
+        // Profile section
+        VerticalLayout profileLayout = new VerticalLayout();
+        profileLayout.setPadding(true);
+        profileLayout.setSpacing(false);
+        profileLayout.setAlignItems(FlexComponent.Alignment.CENTER);
+        profileLayout.getStyle().set("border-bottom", "1px solid #334155");
 
-        logoLayout.add(logo, title);
+        Div avatar = new Div(new Span("👤"));
+        avatar.getStyle()
+                .set("width", "64px")
+                .set("height", "64px")
+                .set("border-radius", "50%")
+                .set("background", "#334155")
+                .set("display", "flex")
+                .set("align-items", "center")
+                .set("justify-content", "center")
+                .set("font-size", "24px")
+                .set("margin-bottom", "8px");
 
-        // User info section
-        var userSection = new VerticalLayout();
-        userSection.setPadding(true);
-        userSection.setSpacing(false);
-        userSection.getStyle().set("background-color", "#4a5568");
-        userSection.getStyle().set("color", "white");
+        Span greet = new Span("Hi, " + (currentUser != null ? currentUser.getName() : "User"));
+        greet.getStyle()
+                .set("color", "#e2e8f0")
+                .set("font-size", "14px")
+                .set("font-weight", "500");
 
-        var avatar = new Avatar();
-        avatar.setName("Customer JASTIPKUY");
-        avatar.getStyle().set("width", "40px");
-        avatar.getStyle().set("height", "40px");
+        profileLayout.add(avatar, greet);
 
-        var greeting = new Span("Hi, Customer JASTIPKUY!");
-        greeting.getStyle().set("font-size", "14px");
+        // Menu items
+        VerticalLayout menuLayout = new VerticalLayout();
+        menuLayout.setPadding(false);
+        menuLayout.setSpacing(false);
+        menuLayout.setWidthFull();
 
-        var userLayout = new HorizontalLayout(avatar, greeting);
-        userLayout.setAlignItems(FlexComponent.Alignment.CENTER);
-        userLayout.setSpacing(true);
+        homeBtn = createMenuButton("Home", VaadinIcon.HOME, "HOME");
+        dataBtn = createMenuButton("Data Saya", VaadinIcon.USER, "DATA");
+        orderBtn = createMenuButton("Order", VaadinIcon.CART, "ORDER");
+        riwayatBtn = createMenuButton("Riwayat", VaadinIcon.CLOCK, "RIWAYAT");
 
-        userSection.add(userLayout);
+        menuLayout.add(homeBtn, dataBtn, orderBtn, riwayatBtn);
 
-        // Navigation menu
-        SideNav navigation = createNavigation();
-        navigation.getStyle().set("background-color", "#4a5568");
+        // Logout button
+        Button logoutBtn = new Button("Logout", new Icon(VaadinIcon.SIGN_OUT));
+        logoutBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        logoutBtn.setWidthFull();
+        logoutBtn.getStyle()
+                .set("color", "#e2e8f0")
+                .set("margin-top", "auto")
+                .set("padding", "12px 16px")
+                .set("border-top", "1px solid #334155");
+        logoutBtn.addClickListener(e -> {
+            VaadinSession.getCurrent().setAttribute("idUser", null);
+            UI.getCurrent().navigate("login");
+        });
 
-        var drawerLayout = new VerticalLayout(logoLayout, userSection, new Scroller(navigation));
-        drawerLayout.setPadding(false);
-        drawerLayout.setSpacing(false);
-        drawerLayout.setSizeFull();
+        sidebar.add(logoLayout, profileLayout, menuLayout, logoutBtn);
+        sidebar.setFlexGrow(1, menuLayout);
 
-        addToDrawer(drawerLayout);
-
-        // Drawer styling
-        getElement().getStyle().set("--vaadin-app-layout-drawer-background", "#4a5568");
+        return sidebar;
     }
 
-    private SideNav createNavigation() {
-        SideNav nav = new SideNav();
-        nav.addItem(new SideNavItem("Home", HomeView.class, VaadinIcon.HOME.create()));
-        nav.addItem(new SideNavItem("Data", DataView.class, VaadinIcon.DATABASE.create()));
-        nav.addItem(new SideNavItem("Order JASTIPKUY", OrderView.class, VaadinIcon.CART.create()));
-        nav.addItem(new SideNavItem("Riwayat", RiwayatView.class, VaadinIcon.CLOCK.create()));
-        nav.addItem(new SideNavItem("Logout", LogoutView.class, VaadinIcon.SIGN_OUT.create()));
+    private Button createMenuButton(String text, VaadinIcon icon, String sectionKey) {
+        Button button = new Button(text, new Icon(icon));
+        button.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE);
+        button.setWidthFull();
+        button.getStyle()
+                .set("color", "#e2e8f0")
+                .set("justify-content", "flex-start")
+                .set("padding", "12px 16px")
+                .set("border-radius", "4px")
+                .set("transition", "background-color 0.2s");
 
-        // Custom styling for nav items
-        nav.getElement().getStyle().set("--vaadin-side-nav-item-background", "transparent");
-        nav.getElement().getStyle().set("--vaadin-side-nav-item-color", "white");
-        nav.getElement().getStyle().set("--vaadin-side-nav-item-selected-background", "#2c5282");
+        button.addClickListener(e -> {
+            resetMenuButtons();
+            button.getStyle().set("background-color", "#334155");
+            showSection(sectionKey);
+        });
 
-        return nav;
+        if ("HOME".equals(sectionKey)) {
+            button.getStyle().set("background-color", "#334155");
+        }
+
+        return button;
     }
 
-    @Override
-    protected void afterNavigation() {
-        super.afterNavigation();
-        viewTitle.setText(getCurrentPageTitle());
+    private void resetMenuButtons() {
+        homeBtn.getStyle().remove("background-color");
+        dataBtn.getStyle().remove("background-color");
+        orderBtn.getStyle().remove("background-color");
+        riwayatBtn.getStyle().remove("background-color");
     }
 
-    private String getCurrentPageTitle() {
-        PageTitle title = getContent().getClass().getAnnotation(PageTitle.class);
-        return title == null ? "" : title.value();
-    }
-}
+    /* ========================= Sections ========================= */
+    private Div buildHomeSection() {
+        Div wrap = new Div();
+        wrap.setWidthFull();
+        wrap.getStyle().set("padding", "24px");
 
-@PageTitle("Home")
-@Route(value = "", layout = UserDashboardView.class)
-public class HomeView extends VerticalLayout {
+        // Title
+        H2 title = new H2("Status Pesanan Saat Ini");
+        title.getStyle()
+                .set("margin", "0 0 20px 0")
+                .set("color", "#1e293b");
 
-    public HomeView() {
-        setSpacing(false);
-        setSizeFull();
-        setJustifyContentMode(JustifyContentMode.CENTER);
-        setDefaultHorizontalComponentAlignment(Alignment.CENTER);
-
-        // Status section
-        var statusSection = createStatusSection();
+        // Active order card
+        Component activeCard = buildActiveCard();
 
         // Action buttons
-        var actionButtons = createActionButtons();
+        HorizontalLayout actions = new HorizontalLayout();
+        actions.setWidthFull();
+        actions.getStyle()
+                .set("flex-wrap", "wrap")
+                .set("gap", "16px")
+                .set("margin", "30px 0");
 
-        // Order history table
-        var historySection = createHistorySection();
+        Button editData = new Button("Edit Data", new Icon(VaadinIcon.EDIT));
+        editData.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        editData.getStyle()
+                .set("background-color", "#3b82f6")
+                .set("font-size", "16px");
+        editData.setWidth("280px");
+        editData.setHeight("50px");
+        editData.addClickListener(e -> showSection("DATA"));
 
-        add(statusSection, actionButtons, historySection);
+        Button buatPesanan = new Button("Buat Pesanan", new Icon(VaadinIcon.PLUS));
+        buatPesanan.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        buatPesanan.getStyle()
+                .set("background-color", "#4f46e5")
+                .set("font-size", "16px");
+        buatPesanan.setWidth("280px");
+        buatPesanan.setHeight("50px");
+        buatPesanan.addClickListener(e -> showSection("ORDER"));
 
-        // Custom styling
-        getStyle().set("background-color", "#f7fafc");
-        getStyle().set("padding", "20px");
+        actions.add(editData, buatPesanan);
+
+        // History
+        H3 historyTitle = new H3("Riwayat Pesanan");
+        historyTitle.getStyle()
+                .set("margin", "30px 0 20px 0")
+                .set("color", "#1e293b");
+
+        setupHistoryGrid(historyGridHome);
+        historyGridHome.setWidthFull();
+
+        wrap.add(title, activeCard, actions, historyTitle, historyGridHome);
+        return wrap;
     }
 
-    private Div createStatusSection() {
-        var statusDiv = new Div();
-        statusDiv.getStyle().set("background-color", "white");
-        statusDiv.getStyle().set("border-radius", "8px");
-        statusDiv.getStyle().set("padding", "20px");
-        statusDiv.getStyle().set("margin-bottom", "20px");
-        statusDiv.getStyle().set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)");
-        statusDiv.setWidth("100%");
+    private Div buildDataSection() {
+        Div wrap = new Div();
+        wrap.setWidthFull();
+        wrap.getStyle().set("padding", "24px");
 
-        var title = new Span("STATUS PESANAN SAAT INI");
-        title.getStyle().set("font-weight", "bold");
-        title.getStyle().set("color", "#2d3748");
+        Div formContainer = new Div();
+        formContainer.getStyle()
+                .set("background", "white")
+                .set("padding", "32px")
+                .set("border-radius", "12px")
+                .set("max-width", "600px")
+                .set("margin", "0 auto")
+                .set("box-shadow", "0 4px 6px rgba(0,0,0,0.1)");
 
-        var timeInfo = new HorizontalLayout();
-        timeInfo.setAlignItems(Alignment.CENTER);
-        timeInfo.setJustifyContentMode(JustifyContentMode.BETWEEN);
-        timeInfo.setWidthFull();
+        H2 title = new H2("Data Pribadi");
+        title.getStyle()
+                .set("color", "#1e293b")
+                .set("text-align", "center")
+                .set("margin-bottom", "24px");
 
-        var time = new Span("09:30");
-        time.getStyle().set("font-size", "24px");
-        time.getStyle().set("font-weight", "bold");
-        time.getStyle().set("color", "#2b6cb0");
+        VerticalLayout fieldsLayout = new VerticalLayout();
+        fieldsLayout.setPadding(false);
+        fieldsLayout.setSpacing(true);
 
-        var date = new Span("Jasa Titipan | 09 JAN 2024");
-        date.getStyle().set("color", "#718096");
+        TextField nisn = createEditableField("NISN", currentUser != null ? Objects.toString(currentUser.getNisn(),"") : "");
+        TextField nama = createEditableField("Nama", currentUser != null ? Objects.toString(currentUser.getName(),"") : "");
+        TextField email = createEditableField("Email", currentUser != null ? Objects.toString(currentUser.getEmail(),"") : "");
+        TextField pass = createEditableField("Password", currentUser != null ? Objects.toString(currentUser.getPassword(),"") : "");
 
-        var viewDetail = new Button("View Detail");
-        viewDetail.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        fieldsLayout.add(
+                createFieldRow(nisn),
+                createFieldRow(nama),
+                createFieldRow(email),
+                createFieldRow(pass)
+        );
 
-        var statusLayout = new VerticalLayout(title, time, date);
-        statusLayout.setSpacing(false);
-        statusLayout.setPadding(false);
+        Button simpan = new Button("Simpan Perubahan", new Icon(VaadinIcon.CHECK));
+        simpan.setWidthFull();
+        simpan.setHeight("45px");
+        simpan.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        simpan.getStyle()
+                .set("background-color", "#3b82f6")
+                .set("margin-top", "24px");
+        simpan.addClickListener(e -> {
+            boolean ok = userDAO.update(
+                    userId,
+                    nisn.getValue(),
+                    nama.getValue(),
+                    email.getValue(),
+                    pass.getValue(),
+                    currentUser != null ? currentUser.getRole() : "USER"
+            );
+            Notification.show(ok ? "Data berhasil disimpan" : "Gagal menyimpan data");
+            if (ok) currentUser = userDAO.getUserById(userId);
+        });
 
-        var contentLayout = new HorizontalLayout(statusLayout, viewDetail);
-        contentLayout.setWidthFull();
-        contentLayout.setJustifyContentMode(JustifyContentMode.BETWEEN);
-        contentLayout.setAlignItems(Alignment.CENTER);
-
-        statusDiv.add(contentLayout);
-        return statusDiv;
+        formContainer.add(title, fieldsLayout, simpan);
+        wrap.add(formContainer);
+        return wrap;
     }
 
-    private HorizontalLayout createActionButtons() {
-        var editDataBtn = new Button("Edit Data");
-        editDataBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        editDataBtn.getStyle().set("background-color", "#2c5282");
-        editDataBtn.setWidth("200px");
-        editDataBtn.setHeight("50px");
-
-        var buatPesananBtn = new Button("Buat Pesanan");
-        buatPesananBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        buatPesananBtn.getStyle().set("background-color", "#2c5282");
-        buatPesananBtn.setWidth("200px");
-        buatPesananBtn.setHeight("50px");
-
-        var buttonLayout = new HorizontalLayout(editDataBtn, buatPesananBtn);
-        buttonLayout.setSpacing(true);
-        buttonLayout.setJustifyContentMode(JustifyContentMode.CENTER);
-
-        return buttonLayout;
+    private TextField createEditableField(String label, String value) {
+        TextField field = new TextField(label);
+        field.setValue(value);
+        field.setWidthFull();
+        field.getStyle()
+                .set("background-color", "white")
+                .set("border-radius", "6px");
+        return field;
     }
 
-    private Div createHistorySection() {
-        var historyDiv = new Div();
-        historyDiv.getStyle().set("background-color", "white");
-        historyDiv.getStyle().set("border-radius", "8px");
-        historyDiv.getStyle().set("padding", "20px");
-        historyDiv.getStyle().set("margin-top", "20px");
-        historyDiv.getStyle().set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)");
-        historyDiv.setWidth("100%");
+    private HorizontalLayout createFieldRow(TextField field) {
+        HorizontalLayout row = new HorizontalLayout();
+        row.setWidthFull();
+        row.setAlignItems(FlexComponent.Alignment.CENTER);
+        row.setSpacing(true);
 
-        var title = new Span("RIWAYAT PESANAN");
-        title.getStyle().set("font-weight", "bold");
-        title.getStyle().set("color", "#2d3748");
-        title.getStyle().set("margin-bottom", "15px");
-        title.getStyle().set("display", "block");
+        field.setWidthFull();
 
-        // Table headers
-        var headerLayout = new HorizontalLayout();
-        headerLayout.setWidthFull();
-        headerLayout.getStyle().set("border-bottom", "1px solid #e2e8f0");
-        headerLayout.getStyle().set("padding-bottom", "10px");
+        Button editBtn = new Button(new Icon(VaadinIcon.EDIT));
+        editBtn.addThemeVariants(ButtonVariant.LUMO_ICON);
+        editBtn.getStyle()
+                .set("background-color", "#e2e8f0")
+                .set("color", "#1e293b")
+                .set("min-width", "40px");
+        editBtn.addClickListener(e -> {
+            boolean ro = field.isReadOnly();
+            field.setReadOnly(!ro);
+            editBtn.setIcon(new Icon(!ro ? VaadinIcon.CHECK : VaadinIcon.EDIT));
+        });
 
-        var headers = new String[]{"ID", "Tanggal", "Jasa", "Status", "Aksi"};
-        for (String header : headers) {
-            var headerSpan = new Span(header);
-            headerSpan.getStyle().set("font-weight", "bold");
-            headerSpan.getStyle().set("color", "#4a5568");
-            headerLayout.add(headerSpan);
-        }
-
-        historyDiv.add(title, headerLayout);
-        return historyDiv;
-    }
-}
-
-
-@PageTitle("Data")
-@Route(value = "data", layout = UserDashboardView.class)
-public class DataView extends VerticalLayout {
-
-    public DataView() {
-        setSpacing(false);
-        setSizeFull();
-        setJustifyContentMode(JustifyContentMode.CENTER);
-        setDefaultHorizontalComponentAlignment(Alignment.CENTER);
-
-        var dataSection = createDataSection();
-        add(dataSection);
-
-        getStyle().set("background-color", "#f7fafc");
-        getStyle().set("padding", "20px");
+        row.add(field, editBtn);
+        row.setFlexGrow(1, field);
+        return row;
     }
 
-    private Div createDataSection() {
-        var dataDiv = new Div();
-        dataDiv.getStyle().set("background-color", "#a0aec0");
-        dataDiv.getStyle().set("border-radius", "8px");
-        dataDiv.getStyle().set("padding", "40px");
-        dataDiv.getStyle().set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)");
-        dataDiv.setWidth("600px");
+    private Div buildOrderSection() {
+        Div wrap = new Div();
+        wrap.setWidthFull();
+        wrap.getStyle().set("padding", "24px");
 
-        var title = new Span("DATA KAMU");
-        title.getStyle().set("font-weight", "bold");
-        title.getStyle().set("color", "white");
-        title.getStyle().set("font-size", "24px");
-        title.getStyle().set("display", "block");
-        title.getStyle().set("text-align", "center");
-        title.getStyle().set("margin-bottom", "30px");
+        Div formContainer = new Div();
+        formContainer.getStyle()
+                .set("background", "white")
+                .set("padding", "32px")
+                .set("border-radius", "12px")
+                .set("max-width", "800px")
+                .set("margin", "0 auto")
+                .set("box-shadow", "0 4px 6px rgba(0,0,0,0.1)");
 
-        // Create form fields
-        var formLayout = new VerticalLayout();
-        formLayout.setSpacing(true);
-        formLayout.setPadding(false);
+        H2 title = new H2("Form Order JastipKuy");
+        title.getStyle()
+                .set("color", "#1e293b")
+                .set("text-align", "center")
+                .set("margin-bottom", "24px");
 
-        // Create text fields with edit buttons
-        var fields = new String[]{"Nama", "Email", "Nomor Telepon", "Alamat"};
-
-        for (String fieldName : fields) {
-            var fieldLayout = new HorizontalLayout();
-            fieldLayout.setWidthFull();
-            fieldLayout.setAlignItems(Alignment.CENTER);
-
-            var textField = new TextField();
-            textField.setPlaceholder(fieldName);
-            textField.setWidth("400px");
-            textField.getStyle().set("background-color", "white");
-
-            var editBtn = new Button("Edit");
-            editBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-            editBtn.getStyle().set("background-color", "#4a5568");
-            editBtn.setWidth("80px");
-
-            fieldLayout.add(textField, editBtn);
-            formLayout.add(fieldLayout);
-        }
-
-        dataDiv.add(title, formLayout);
-        return dataDiv;
-    }
-}
-
-
-@PageTitle("Order JASTIPKUY")
-@Route(value = "order", layout = UserDashboardView.class)
-public class OrderView extends VerticalLayout {
-
-    public OrderView() {
-        setSpacing(false);
-        setSizeFull();
-        setJustifyContentMode(JustifyContentMode.CENTER);
-        setDefaultHorizontalComponentAlignment(Alignment.CENTER);
-
-        var orderForm = createOrderForm();
-        add(orderForm);
-
-        getStyle().set("background-color", "#f7fafc");
-        getStyle().set("padding", "20px");
-    }
-
-    private Div createOrderForm() {
-        var formDiv = new Div();
-        formDiv.getStyle().set("background-color", "white");
-        formDiv.getStyle().set("border-radius", "8px");
-        formDiv.getStyle().set("padding", "30px");
-        formDiv.getStyle().set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)");
-        formDiv.setWidth("700px");
-
-        var title = new Span("FORM ORDER JASTIPKUY!");
-        title.getStyle().set("font-weight", "bold");
-        title.getStyle().set("color", "#2d3748");
-        title.getStyle().set("font-size", "24px");
-        title.getStyle().set("display", "block");
-        title.getStyle().set("text-align", "center");
-        title.getStyle().set("margin-bottom", "30px");
-
-        // Create form layout with two columns
-        var formLayout = new HorizontalLayout();
+        HorizontalLayout formLayout = new HorizontalLayout();
         formLayout.setWidthFull();
         formLayout.setSpacing(true);
 
         // Left column
-        var leftColumn = new VerticalLayout();
+        VerticalLayout leftColumn = new VerticalLayout();
         leftColumn.setWidth("50%");
-        leftColumn.setSpacing(true);
         leftColumn.setPadding(false);
+        leftColumn.setSpacing(true);
 
-        var namaBarang = new TextField("Nama Barang");
+        TextField namaBarang = new TextField("Nama Barang");
         namaBarang.setWidthFull();
+        namaBarang.setRequired(true);
 
-        var lokasiJemput = new TextField("Lokasi Jemput");
+        TextField lokasiJemput = new TextField("Lokasi Jemput");
         lokasiJemput.setWidthFull();
+        lokasiJemput.setRequired(true);
 
-        var lokasiAntar = new TextField("Lokasi Antar");
+        TextField lokasiAntar = new TextField("Lokasi Antar");
         lokasiAntar.setWidthFull();
+        lokasiAntar.setRequired(true);
 
-        var hargaBarang = new TextField("Harga Barang");
-        hargaBarang.setPlaceholder("*berdasarkan uang");
-        hargaBarang.setWidthFull();
+        TextArea biayaBarang = new TextArea("Biaya Barang (Opsional)");
+        biayaBarang.setPlaceholder("Jika belum dibayar, kosongkan saja");
+        biayaBarang.setWidthFull();
+        biayaBarang.setHeight("100px");
 
-        leftColumn.add(namaBarang, lokasiJemput, lokasiAntar, hargaBarang);
+        leftColumn.add(namaBarang, lokasiJemput, lokasiAntar, biayaBarang);
 
         // Right column
-        var rightColumn = new VerticalLayout();
+        VerticalLayout rightColumn = new VerticalLayout();
         rightColumn.setWidth("50%");
-        rightColumn.setSpacing(true);
         rightColumn.setPadding(false);
+        rightColumn.setSpacing(true);
 
-        var tanggal = new TextField("Tanggal");
+        DatePicker tanggal = new DatePicker("Tanggal");
         tanggal.setWidthFull();
+        tanggal.setValue(LocalDate.now());
 
-        var hargaJastiper = new TextField("Harga Jastiper");
-        hargaJastiper.setPlaceholder("Rp. 2.000,00");
-        hargaJastiper.setWidthFull();
+        TextField biayaJastiper = new TextField("Biaya Jastiper");
+        biayaJastiper.setWidthFull();
+        biayaJastiper.setValue("Rp 2.000");
+        biayaJastiper.setReadOnly(true);
 
-        var totalBiaya = new TextField("Total Biaya");
+        TextField totalBiaya = new TextField("Total Biaya");
         totalBiaya.setWidthFull();
+        totalBiaya.setReadOnly(true);
 
-        rightColumn.add(tanggal, hargaJastiper, totalBiaya);
+        rightColumn.add(tanggal, biayaJastiper, totalBiaya);
 
         formLayout.add(leftColumn, rightColumn);
 
         // Buttons
-        var buttonLayout = new HorizontalLayout();
-        buttonLayout.setJustifyContentMode(JustifyContentMode.CENTER);
-        buttonLayout.setSpacing(true);
+        HorizontalLayout buttons = new HorizontalLayout();
+        buttons.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
+        buttons.setWidthFull();
+        buttons.setSpacing(true);
+        buttons.getStyle().set("margin-top", "24px");
 
-        var cancelBtn = new Button("Cancel");
-        cancelBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-        cancelBtn.getStyle().set("color", "#4a5568");
+        Button cancel = new Button("Batal", new Icon(VaadinIcon.CLOSE));
+        cancel.setWidth("150px");
+        cancel.setHeight("45px");
+        cancel.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+        cancel.getStyle()
+                .set("background-color", "#e2e8f0")
+                .set("color", "#1e293b");
+        cancel.addClickListener(e -> showSection("HOME"));
 
-        var submitBtn = new Button("Submit");
-        submitBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        submitBtn.getStyle().set("background-color", "#2c5282");
+        Button submit = new Button("Submit Order", new Icon(VaadinIcon.CHECK));
+        submit.setWidth("150px");
+        submit.setHeight("45px");
+        submit.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        submit.getStyle().set("background-color", "#3b82f6");
+        submit.addClickListener(e -> {
+            if (namaBarang.isEmpty() || lokasiJemput.isEmpty() || lokasiAntar.isEmpty()) {
+                Notification.show("Harap lengkapi semua field yang wajib diisi!");
+                return;
+            }
 
-        buttonLayout.add(cancelBtn, submitBtn);
+            // Create titipan record
+            Titipan t = new Titipan();
+            t.setUser_id(userId);
+            t.setStatus("MENUNGGU");
+            t.setDiambil_oleh(null);
+            t.setCreated_at(new Date());
+            t.setHarga_estimasi(2000L); // Fixed jastiper fee
+            t.setLokasi_antar(lokasiAntar.getValue());
+            t.setLokasi_jemput(lokasiJemput.getValue());
 
-        formDiv.add(title, formLayout, buttonLayout);
-        return formDiv;
+            // Insert header and get new ID
+            int idBaru = titipanDAO.insertTitipanReturnId(t);
+            if (idBaru <= 0) {
+                Notification.show("Gagal membuat titipan");
+                return;
+            }
+
+            // Create detail record
+            TitipanDetail detail = new TitipanDetail();
+            detail.setIdTransaksi(idBaru);
+            detail.setDeskripsi(namaBarang.getValue());
+            detail.setCatatan_opsional(lokasiJemput.getValue() + " - " + lokasiAntar.getValue());
+            detailDAO.insertDetail(detail);
+
+            Notification.show("Order berhasil dibuat (#" + idBaru + ")");
+            reloadHomeAndHistory();
+            showSection("HOME");
+        });
+
+        buttons.add(cancel, submit);
+
+        formContainer.add(title, formLayout, buttons);
+        wrap.add(formContainer);
+        return wrap;
     }
-}
 
-@PageTitle("Riwayat")
-@Route(value = "riwayat", layout = UserDashboardView.class)
-public class RiwayatView extends VerticalLayout {
+    private Div buildRiwayatSection() {
+        Div wrap = new Div();
+        wrap.setWidthFull();
+        wrap.getStyle().set("padding", "24px");
 
-    public RiwayatView() {
-        setSpacing(false);
-        setSizeFull();
-        setJustifyContentMode(JustifyContentMode.CENTER);
-        setDefaultHorizontalComponentAlignment(Alignment.CENTER);
+        H2 title = new H2("Riwayat Pesanan");
+        title.getStyle()
+                .set("color", "#1e293b")
+                .set("margin-bottom", "20px");
 
-        var riwayatSection = createRiwayatSection();
-        add(riwayatSection);
+        // Grid for history
+        setupHistoryGrid(historyGridFull);
+        historyGridFull.setWidthFull();
+        historyGridFull.getStyle()
+                .set("background", "white")
+                .set("border-radius", "8px")
+                .set("box-shadow", "0 4px 6px rgba(0,0,0,0.1)");
 
-        getStyle().set("background-color", "#f7fafc");
-        getStyle().set("padding", "20px");
+        wrap.add(title, historyGridFull);
+        return wrap;
     }
 
-    private HorizontalLayout createRiwayatSection() {
-        var mainLayout = new HorizontalLayout();
-        mainLayout.setWidthFull();
-        mainLayout.setMaxWidth("1200px");
-        mainLayout.setSpacing(true);
-
-        // Left side - Form
-        var formDiv = createFormSection();
-
-        // Right side - Rating dialog placeholder
-        var rightDiv = new Div();
-        rightDiv.getStyle().set("background-color", "white");
-        rightDiv.getStyle().set("border-radius", "8px");
-        rightDiv.getStyle().set("padding", "20px");
-        rightDiv.getStyle().set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)");
-        rightDiv.setWidth("400px");
-        rightDiv.setHeight("300px");
-
-        mainLayout.add(formDiv, rightDiv);
-        return mainLayout;
+    /* ========================= Helpers ========================= */
+    private void showSection(String key) {
+        homeSection.setVisible("HOME".equals(key));
+        dataSection.setVisible("DATA".equals(key));
+        orderSection.setVisible("ORDER".equals(key));
+        riwayatSection.setVisible("RIWAYAT".equals(key));
     }
 
-    private Div createFormSection() {
-        var formDiv = new Div();
-        formDiv.getStyle().set("background-color", "white");
-        formDiv.getStyle().set("border-radius", "8px");
-        formDiv.getStyle().set("padding", "30px");
-        formDiv.getStyle().set("box-shadow", "0 2px 4px rgba(0,0,0,0.1)");
-        formDiv.setWidth("600px");
+    private Component buildActiveCard() {
+        Div card = new Div();
+        card.getStyle()
+                .set("padding", "24px")
+                .set("border-radius", "12px")
+                .set("background", "linear-gradient(135deg, #3b82f6, #6366f1)")
+                .set("color", "white")
+                .set("box-shadow", "0 10px 30px rgba(0,0,0,0.1)")
+                .set("width", "100%");
 
-        var title = new Span("RIWAYAT PESANAN");
-        title.getStyle().set("font-weight", "bold");
-        title.getStyle().set("color", "#2d3748");
-        title.getStyle().set("font-size", "24px");
-        title.getStyle().set("display", "block");
-        title.getStyle().set("margin-bottom", "30px");
-
-        var formLayout = new VerticalLayout();
-        formLayout.setSpacing(true);
-        formLayout.setPadding(false);
-
-        // Form fields
-        var fields = new String[]{
-                "ID", "Tanggal", "Nama Barang", "Nama Customer",
-                "Nama JASTIPER", "Lokasi Jemput", "Lokasi Antar",
-                "Harga Barang", "Harga Jastiper", "Total Biaya"
-        };
-
-        for (String fieldName : fields) {
-            var textField = new TextField(fieldName);
-            textField.setWidthFull();
-            textField.setReadOnly(true);
-            formLayout.add(textField);
+        Titipan t = titipanDAO.getActiveByUser(userId);
+        if (t == null) {
+            Span noOrder = new Span("Tidak ada pesanan aktif saat ini.");
+            noOrder.getStyle().set("font-size", "16px");
+            card.add(noOrder);
+            return card;
         }
 
-        // Rating button
-        var ratingBtn = new Button("Rating");
-        ratingBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        ratingBtn.getStyle().set("background-color", "#2c5282");
-        ratingBtn.addClickListener(e -> openRatingDialog());
+        String driver = (t.getDiambil_oleh() == null || t.getDiambil_oleh() == 0)
+                ? "Belum ada driver" : userDAO.getUserNameById(t.getDiambil_oleh());
+        String jam = new SimpleDateFormat("HH.mm", ID).format(t.getCreated_at());
+        String tanggal = new SimpleDateFormat("EEEE, dd MMM yyyy", ID).format(t.getCreated_at());
 
-        formLayout.add(ratingBtn);
-        formDiv.add(title, formLayout);
-        return formDiv;
+        HorizontalLayout layout = new HorizontalLayout();
+        layout.setAlignItems(FlexComponent.Alignment.CENTER);
+        layout.setWidthFull();
+
+        VerticalLayout leftInfo = new VerticalLayout();
+        leftInfo.setPadding(false);
+        leftInfo.setSpacing(false);
+
+        Span driverInfo = new Span(driver);
+        driverInfo.getStyle().set("font-size", "16px");
+
+        H1 time = new H1(jam);
+        time.getStyle()
+                .set("font-size", "48px")
+                .set("font-weight", "bold")
+                .set("margin", "10px 0");
+
+        Span statusText = new Span("DIPROSES".equalsIgnoreCase(t.getStatus()) ?
+                "Memproses pesanan" : t.getStatus());
+        statusText.getStyle().set("font-size", "18px");
+
+        leftInfo.add(driverInfo, time, statusText);
+
+        Button detailBtn = new Button("Detail", new Icon(VaadinIcon.ELLIPSIS_DOTS_H));
+        detailBtn.getStyle()
+                .set("background-color", "rgba(255,255,255,0.2)")
+                .set("color", "white")
+                .set("min-width", "120px");
+        detailBtn.addClickListener(e -> openDetailDialog(t.getId()));
+
+        layout.add(leftInfo, detailBtn);
+        layout.setFlexGrow(1, leftInfo);
+
+        card.add(layout);
+        return card;
     }
 
-    private void openRatingDialog() {
+    private void setupHistoryGrid(Grid<Titipan> grid) {
+        grid.removeAllColumns();
+        grid.addColumn(Titipan::getId)
+                .setHeader("ID")
+                .setWidth("80px")
+                .setFlexGrow(0);
+
+        grid.addColumn(t -> sdf.format(t.getCreated_at()))
+                .setHeader("Tanggal")
+                .setWidth("150px");
+
+        grid.addColumn(t -> {
+            var d = detailDAO.getDetailsByTransaksiId(t.getId());
+            return d != null && !d.isEmpty() ? d.get(0).getDeskripsi() : "-";
+        }).setHeader("Nama Barang");
+
+        grid.addColumn(t -> currentUser != null ? currentUser.getName() : "-")
+                .setHeader("Customer");
+
+        grid.addColumn(t -> t.getDiambil_oleh() != null && t.getDiambil_oleh() != 0 ?
+                        userDAO.getUserNameById(t.getDiambil_oleh()) : "-")
+                .setHeader("JASTIPER");
+
+        grid.addColumn(Titipan::getStatus)
+                .setHeader("Status")
+                .setWidth("120px");
+
+        grid.addComponentColumn(t -> {
+                    Button btnRate = new Button("Rating", new Icon(VaadinIcon.STAR));
+                    btnRate.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+                    btnRate.getStyle()
+                            .set("background-color", "#3b82f6")
+                            .set("font-size", "13px");
+                    boolean enableRate = "SELESAI".equalsIgnoreCase(t.getStatus())
+                            && t.getDiambil_oleh() != null && t.getDiambil_oleh() != 0;
+                    btnRate.setEnabled(enableRate);
+                    btnRate.addClickListener(e -> openRatingDialog(t));
+                    return btnRate;
+                }).setHeader("Aksi")
+                .setWidth("120px")
+                .setFlexGrow(0);
+
+        grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES);
+
+        var history = titipanDAO.getHistoryByUser(userId);
+        if (history != null) grid.setItems(history);
+    }
+
+    private void reloadHomeAndHistory() {
+        // Rebuild Home section
+        int idxHome = contentWrap.indexOf(homeSection);
+        if (idxHome >= 0) {
+            contentWrap.remove(homeSection);
+            homeSection = buildHomeSection();
+            contentWrap.addComponentAtIndex(idxHome, homeSection);
+        }
+
+        // Refresh grids
+        var history = titipanDAO.getHistoryByUser(userId);
+        if (historyGridHome != null) historyGridHome.setItems(history);
+        if (historyGridFull != null) historyGridFull.setItems(history);
+
+        // Rebuild Riwayat section
+        int idxR = contentWrap.indexOf(riwayatSection);
+        if (idxR >= 0) {
+            contentWrap.remove(riwayatSection);
+            riwayatSection = buildRiwayatSection();
+            contentWrap.addComponentAtIndex(idxR, riwayatSection);
+        }
+    }
+
+    private void openDetailDialog(int titipanId) {
         Dialog dialog = new Dialog();
-        dialog.setWidth("400px");
-        dialog.setHeight("300px");
+        dialog.setWidth("600px");
+        dialog.setHeight("400px");
 
-        var dialogLayout = new VerticalLayout();
-        dialogLayout.setSpacing(true);
-        dialogLayout.setPadding(true);
+        H3 header = new H3("Detail Titipan #" + titipanId);
+        header.getStyle().set("color", "#1e293b");
 
-        var title = new Span("RATING JASTIPER");
-        title.getStyle().set("font-weight", "bold");
-        title.getStyle().set("text-align", "center");
+        Grid<TitipanDetail> grid = new Grid<>(TitipanDetail.class, false);
+        grid.addColumn(TitipanDetail::getDeskripsi).setHeader("Deskripsi");
+        grid.addColumn(TitipanDetail::getCatatan_opsional).setHeader("Catatan");
+        grid.setItems(detailDAO.getDetailsByTransaksiId(titipanId));
 
-        var ratingField = new TextField("Rating (1-10)");
-        ratingField.setPlaceholder("Masukkan rating");
+        Button close = new Button("Tutup", new Icon(VaadinIcon.CLOSE), e -> dialog.close());
+        close.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        close.getStyle().set("background-color", "#3b82f6");
 
-        var commentField = new TextField("Komentar");
-        commentField.setPlaceholder("Masukkan komentar");
-
-        var buttonLayout = new HorizontalLayout();
-        var cancelBtn = new Button("Cancel", e -> dialog.close());
-        var submitBtn = new Button("Submit", e -> {
-            // Handle rating submission
-            dialog.close();
-        });
-        submitBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-
-        buttonLayout.add(cancelBtn, submitBtn);
-        buttonLayout.setJustifyContentMode(JustifyContentMode.CENTER);
-
-        dialogLayout.add(title, ratingField, commentField, buttonLayout);
-        dialog.add(dialogLayout);
+        VerticalLayout box = new VerticalLayout(header, grid, close);
+        box.setAlignItems(FlexComponent.Alignment.END);
+        dialog.add(box);
         dialog.open();
     }
-}
 
-@PageTitle("Logout")
-@Route(value = "logout", layout = UserDashboardView.class)
-public class LogoutView extends VerticalLayout {
+    private void openRatingDialog(Titipan t) {
+        Dialog dialog = new Dialog();
+        dialog.setWidth("500px");
 
-    public LogoutView() {
-        setSpacing(false);
-        setSizeFull();
-        setJustifyContentMode(JustifyContentMode.CENTER);
-        setDefaultHorizontalComponentAlignment(Alignment.CENTER);
+        H3 title = new H3("Beri Rating JASTIPER");
+        title.getStyle().set("color", "#1e293b");
 
-        add(new H1("Logout functionality would be implemented here"));
+        String driverName = (t.getDiambil_oleh() == null || t.getDiambil_oleh() == 0)
+                ? "-" : userDAO.getUserNameById(t.getDiambil_oleh());
+        Span s1 = new Span("Nama JASTIPER: " + driverName);
+        s1.getStyle().set("font-weight", "500");
+
+        NumberField rating = new NumberField("Rating (1-10)");
+        rating.setMin(1);
+        rating.setMax(10);
+        rating.setStep(1);
+        rating.setValue(5d);
+        rating.setWidth("120px");
+
+        TextArea saran = new TextArea("Saran/Komentar");
+        saran.setWidthFull();
+        saran.setHeight("120px");
+
+        HorizontalLayout buttons = new HorizontalLayout();
+        buttons.setSpacing(true);
+        buttons.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
+
+        Button cancel = new Button("Batal", new Icon(VaadinIcon.CLOSE), e -> dialog.close());
+        cancel.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
+
+        Button submit = new Button("Submit", new Icon(VaadinIcon.CHECK), e -> {
+            int r = rating.getValue() == null ? 0 : rating.getValue().intValue();
+            boolean ok1 = ratingDAO.insertRating(t.getDiambil_oleh(), r);
+            boolean ok2 = laporanDAO.insertLaporan(userId, t.getDiambil_oleh(), saran.getValue());
+            Notification.show((ok1 && ok2) ? "Terima kasih atas rating Anda!" : "Gagal menyimpan rating");
+            dialog.close();
+        });
+        submit.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
+        submit.getStyle().set("background-color", "#3b82f6");
+
+        buttons.add(cancel, submit);
+
+        VerticalLayout content = new VerticalLayout(title, s1, rating, saran, buttons);
+        content.setPadding(false);
+        dialog.add(content);
+        dialog.open();
     }
-}
 
+    private String formatRupiah(Long amount) {
+        if (amount == null) return "-";
+        return rupiah.format(amount).replace(",00", "");
+    }
+
+    @Override
+    public void beforeEnter(BeforeEnterEvent event) {
+        Integer userId = SessionUtils.getUserId();
+        String userRole = SessionUtils.getUserRole();
+
+        if (userId != null) {
+            if (!"Penitip".equalsIgnoreCase(userRole)) {
+                if ("Admin".equalsIgnoreCase(userRole)) {
+                    event.forwardTo("admin");
+                } else if ("Jastiper".equalsIgnoreCase(userRole)) {
+                    event.forwardTo("jastiper");
+                } else {
+                    event.forwardTo(""); // fallback ke home
+                }
+            }
+        } else {
+            event.forwardTo("login");
+        }
+    }
+
+}
