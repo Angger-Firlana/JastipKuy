@@ -24,6 +24,11 @@ public class TitipanDAO {
         t.setHarga_estimasi(rs.getLong("harga_estimasi"));
         t.setStatus(rs.getString("status"));
 
+        // Fix: set nama_barang, lokasi_jemput, lokasi_antar
+        t.setNama_barang(rs.getString("nama_barang"));
+        t.setLokasi_jemput(rs.getString("lokasi_jemput"));
+        t.setLokasi_antar(rs.getString("lokasi_antar"));
+
         int dio = rs.getInt("diambil_oleh"); // jika kolom NULL, getInt -> 0
         t.setDiambil_oleh(rs.wasNull() ? null : dio);
 
@@ -100,8 +105,8 @@ public class TitipanDAO {
 
     public int insertTitipanReturnId(Titipan t) {
         int id = -1;
-        String sql = "INSERT INTO titipan (user_id, status, harga_estimasi, created_at, diambil_oleh) " +
-                "VALUES (?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO titipan (user_id, status, harga_estimasi, created_at, diambil_oleh, lokasi_jemput, lokasi_antar) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setInt(1, t.getUser_id());
             stmt.setString(2, t.getStatus());
@@ -114,6 +119,9 @@ public class TitipanDAO {
             } else {
                 stmt.setInt(5, t.getDiambil_oleh());
             }
+            // Set lokasi_jemput dan lokasi_antar
+            stmt.setString(6, t.getLokasi_jemput());
+            stmt.setString(7, t.getLokasi_antar());
 
             stmt.executeUpdate();
             ResultSet rs = stmt.getGeneratedKeys();

@@ -482,9 +482,20 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
             t.setStatus("MENUNGGU");
             t.setDiambil_oleh(null);
             t.setCreated_at(new Date());
-            t.setHarga_estimasi(2000L); // Fixed jastiper fee
+            // Biaya barang dari input, default 0 jika kosong
+            Long biayaBarangValue = 0L;
+            try {
+                String val = biayaBarang.getValue();
+                if (val != null && !val.trim().isEmpty()) {
+                    biayaBarangValue = Long.parseLong(val.replaceAll("[^0-9]", ""));
+                }
+            } catch (Exception ex) {
+                biayaBarangValue = 0L;
+            }
+            t.setHarga_estimasi(biayaBarangValue);
             t.setLokasi_antar(lokasiAntar.getValue());
             t.setLokasi_jemput(lokasiJemput.getValue());
+            t.setNama_barang(namaBarang.getValue());
 
             // Insert header and get new ID
             int idBaru = titipanDAO.insertTitipanReturnId(t);
@@ -617,13 +628,12 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
                 .setHeader("Tanggal")
                 .setWidth("150px");
 
-        grid.addColumn(t -> {
-            var d = detailDAO.getDetailsByTransaksiId(t.getId());
-            return d != null && !d.isEmpty() ? d.get(0).getDeskripsi() : "-";
-        }).setHeader("Nama Barang");
+        grid.addColumn(t -> t.getNama_barang() != null ? t.getNama_barang() : "-")
+                .setHeader("Nama Barang");
 
-        grid.addColumn(t -> currentUser != null ? currentUser.getName() : "-")
-                .setHeader("Customer");
+        // Hapus kolom Customer
+        // grid.addColumn(t -> currentUser != null ? currentUser.getName() : "-")
+        //        .setHeader("Customer");
 
         grid.addColumn(t -> t.getDiambil_oleh() != null && t.getDiambil_oleh() != 0 ?
                         userDAO.getUserNameById(t.getDiambil_oleh()) : "-")
