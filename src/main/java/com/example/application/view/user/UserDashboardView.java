@@ -7,8 +7,9 @@ import com.example.application.model.User;
 import com.example.application.session.SessionUtils;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
+import com.vaadin.flow.component.Unit;
 import com.vaadin.flow.component.button.Button;
-import com.vaadin.flow.component.button.ButtonVariant;
+import com.vaadin.flow.component.dependency.Uses;
 import com.vaadin.flow.component.datepicker.DatePicker;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.grid.Grid;
@@ -17,9 +18,7 @@ import com.vaadin.flow.component.html.*;
 import com.vaadin.flow.component.icon.Icon;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.notification.Notification;
-import com.vaadin.flow.component.orderedlayout.FlexComponent;
-import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
-import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.orderedlayout.*;
 import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
@@ -34,10 +33,14 @@ import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.util.*;
 
-@Route("user")
-@PageTitle("Dashboard User | JastipKuy")
-public class UserDashboardView extends HorizontalLayout implements BeforeEnterObserver {
+//tes
 
+@PageTitle("JastipKuy • Dashboard Penitip")
+@Route("user")
+@Uses(Icon.class)
+public class UserDashboardView extends Div implements BeforeEnterObserver {
+
+    // DAO
     private final TitipanDAO titipanDAO = new TitipanDAO();
     private final TitipanDetailDAO detailDAO = new TitipanDetailDAO();
     private final UserDAO userDAO = new UserDAO();
@@ -52,22 +55,25 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
     private final SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy HH:mm", ID);
     private final NumberFormat rupiah = NumberFormat.getCurrencyInstance(ID);
 
-    // Sidebar buttons
-    private Button homeBtn, dataBtn, orderBtn, riwayatBtn;
+    // Color scheme (consistent with JastiperView)
+    private static final String NAVY      = "#11284B";
+    private static final String SLATE     = "#34465B";
+    private static final String WHITE     = "#FFFFFF";
+    private static final String LIGHT     = "#E6E6E6";
+    private static final String TEXT_DARK = "#0F172A";
+    private static final String PRIMARY   = "#3B82F6";
+    private static final String SUCCESS   = "#10B981";
+    private static final String WARNING   = "#F59E0B";
+    private static final String DANGER    = "#EF4444";
 
-    // Sections
-    private VerticalLayout contentWrap;
-    private Div homeSection, dataSection, orderSection, riwayatSection;
-
-    // Grids
-    private Grid<Titipan> historyGridHome = new Grid<>(Titipan.class, false);
-    private Grid<Titipan> historyGridFull = new Grid<>(Titipan.class, false);
+    // Layout components
+    private final VerticalLayout content = new VerticalLayout();
+    private final Map<String, Component> pages = new LinkedHashMap<>();
 
     public UserDashboardView() {
         setSizeFull();
-        setPadding(false);
-        setSpacing(false);
-        getStyle().set("overflow", "hidden"); // Prevent double scroll
+        getStyle().set("background", WHITE).set("font-family", "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial");
+        
         Integer userId = SessionUtils.getUserId();
         if (userId == null) {
             UI.getCurrent().navigate("login");
@@ -81,117 +87,34 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
             return;
         }
 
+        // ======= TOP BAR =======
+        HorizontalLayout topBar = new HorizontalLayout();
+        topBar.setWidthFull();
+        topBar.setPadding(false);
+        topBar.setSpacing(false);
+        topBar.setAlignItems(FlexComponent.Alignment.CENTER);
+        topBar.getStyle().set("background", NAVY).set("color", WHITE).set("height", "64px").set("padding", "0 20px");
 
-        // UI Structure
-        VerticalLayout sidebar = buildSidebar();
-        contentWrap = new VerticalLayout();
-        contentWrap.setSizeFull();
-        contentWrap.setPadding(false);
-        contentWrap.getStyle()
-                .set("margin-left", "250px")
-                .set("background-color", "#f8fafc")
-                .set("min-height", "100vh");
+        H3 brand = new H3("!! JASTIPKUY !!");
+        brand.getStyle().set("margin", "0").set("letter-spacing", "2px").set("color", WHITE);
 
-        // Build all sections
-        homeSection = buildHomeSection();
-        dataSection = buildDataSection();
-        orderSection = buildOrderSection();
-        riwayatSection = buildRiwayatSection();
+        Div topRight = new Div();
+        topRight.getStyle().set("margin-left", "auto").set("display", "flex").set("align-items", "center").set("gap", "18px");
 
-        // Default: HOME
-        contentWrap.add(homeSection, dataSection, orderSection, riwayatSection);
-        showSection("HOME");
+        Icon bell = VaadinIcon.BELL.create(); 
+        bell.setColor(WHITE); 
+        bell.setSize("20px");
+        
+        Button logout = new Button("Logout", VaadinIcon.SIGN_OUT.create()); 
+        stylePrimary(logout);
+        
+        topRight.add(bell, logout);
 
-        add(sidebar, contentWrap);
-    }
-
-    /* ========================= Sidebar ========================= */
-    private VerticalLayout buildSidebar() {
-        VerticalLayout sidebar = new VerticalLayout();
-        sidebar.setWidth("250px");
-        sidebar.setHeight("100vh");
-        sidebar.setPadding(false);
-        sidebar.setSpacing(false);
-        sidebar.getStyle()
-                .set("position", "fixed")
-                .set("top", "0")
-                .set("left", "0")
-                .set("background-color", "#1e293b")
-                .set("color", "white")
-                .set("box-shadow", "2px 0 10px rgba(0,0,0,0.1)");
-
-        // Logo section
-        HorizontalLayout logoLayout = new HorizontalLayout();
-        logoLayout.setAlignItems(FlexComponent.Alignment.CENTER);
-        logoLayout.setPadding(true);
-        logoLayout.setSpacing(true);
-        logoLayout.setWidthFull();
-
-        Image logoImg = new Image("logo.png", "JastipKuy");
-        logoImg.setHeight("32px");
-        H3 logoText = new H3("JASTIPKUY");
-        logoText.getStyle()
-                .set("color", "white")
-                .set("margin", "0")
-                .set("font-size", "18px")
-                .set("font-weight", "600");
-        logoLayout.add(logoImg, logoText);
-
-        // Profile section
-        VerticalLayout profileLayout = new VerticalLayout();
-        profileLayout.setPadding(true);
-        profileLayout.setSpacing(false);
-        profileLayout.setAlignItems(FlexComponent.Alignment.CENTER);
-        profileLayout.getStyle().set("border-bottom", "1px solid #334155");
-
-        Div avatar = new Div(new Span("👤"));
-        avatar.getStyle()
-                .set("width", "64px")
-                .set("height", "64px")
-                .set("border-radius", "50%")
-                .set("background", "#334155")
-                .set("display", "flex")
-                .set("align-items", "center")
-                .set("justify-content", "center")
-                .set("font-size", "24px")
-                .set("margin-bottom", "8px");
-
-        Span greet = new Span("Hi, " + (currentUser != null ? currentUser.getName() : "User"));
-        greet.getStyle()
-                .set("color", "#e2e8f0")
-                .set("font-size", "14px")
-                .set("font-weight", "500");
-
-        profileLayout.add(avatar, greet);
-
-        // Menu items
-        VerticalLayout menuLayout = new VerticalLayout();
-        menuLayout.setPadding(false);
-        menuLayout.setSpacing(false);
-        menuLayout.setWidthFull();
-
-        homeBtn = createMenuButton("Home", VaadinIcon.HOME, "HOME");
-        dataBtn = createMenuButton("Data Saya", VaadinIcon.USER, "DATA");
-        orderBtn = createMenuButton("Order", VaadinIcon.CART, "ORDER");
-        riwayatBtn = createMenuButton("Riwayat", VaadinIcon.CLOCK, "RIWAYAT");
-
-        menuLayout.add(homeBtn, dataBtn, orderBtn, riwayatBtn);
-
-        // Logout button
-        Button logoutBtn = new Button("Logout", new Icon(VaadinIcon.SIGN_OUT));
-        logoutBtn.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-        logoutBtn.setWidthFull();
-        logoutBtn.getStyle()
-                .set("color", "#e2e8f0")
-                .set("margin-top", "auto")
-                .set("padding", "12px 16px")
-                .set("border-top", "1px solid #334155");
-        logoutBtn.addClickListener(e -> {
+        logout.addClickListener(e -> {
             try {
                 SessionUtils.clearSession();
                 UI.getCurrent().navigate("login");
             } catch (Exception ex) {
-                // Fallback logout - clear session manually and navigate
                 try {
                     VaadinSession.getCurrent().setAttribute("idUser", null);
                     VaadinSession.getCurrent().setAttribute("userRole", null);
@@ -200,216 +123,207 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
             }
         });
 
-        sidebar.add(logoLayout, profileLayout, menuLayout, logoutBtn);
-        sidebar.setFlexGrow(1, menuLayout);
+        topBar.add(brand, topRight);
 
-        return sidebar;
+        // ======= LAYOUT (SIDEBAR + CONTENT) =======
+        HorizontalLayout root = new HorizontalLayout();
+        root.setSizeFull(); 
+        root.setPadding(false); 
+        root.setSpacing(false);
+
+        // ======= SIDEBAR =======
+        VerticalLayout sidebar = new VerticalLayout();
+        sidebar.setWidth(280, Unit.PIXELS); 
+        sidebar.setPadding(false); 
+        sidebar.setSpacing(false);
+        sidebar.getStyle().set("background", SLATE).set("color", WHITE).set("min-height", "calc(100vh - 64px)");
+
+        VerticalLayout avatarWrap = new VerticalLayout();
+        avatarWrap.setAlignItems(FlexComponent.Alignment.CENTER);
+        avatarWrap.getStyle().set("padding", "30px 16px 22px 16px");
+        
+        Div avatar = circle(100, LIGHT);
+        Icon userIco = VaadinIcon.USER.create(); 
+        userIco.setSize("44px"); 
+        userIco.setColor("#7A8AA0");
+        avatar.add(userIco);
+        
+        Paragraph hi = new Paragraph("Hi, " + (currentUser != null ? currentUser.getName() : "Penitip")); 
+        hi.getStyle().set("color", WHITE).set("margin", "14px 0 0 0").set("font-weight", "600");
+        
+        avatarWrap.add(avatar, hi);
+
+        // Build pages first
+        pages.put("Home", buildHome());
+        pages.put("Buat Pesanan", buildOrderSection());
+        pages.put("Riwayat Pesanan", buildRiwayatSection());
+        pages.put("Data Pribadi", buildDataSection());
+
+        sidebar.add(avatarWrap);
+        pages.keySet().forEach(name -> sidebar.add(sideItem(name, () -> switchContent(name))));
+
+        // ======= CONTENT WRAPPER =======
+        content.setPadding(true); 
+        content.setSpacing(false); 
+        content.setSizeFull(); 
+        content.getStyle().set("padding", "24px");
+        
+        switchContent("Home");
+
+        root.add(sidebar, content);
+        root.setFlexGrow(0, sidebar); 
+        root.setFlexGrow(1, content);
+
+        add(topBar, root);
     }
 
-    private Button createMenuButton(String text, VaadinIcon icon, String sectionKey) {
-        Button button = new Button(text, new Icon(icon));
-        button.addThemeVariants(ButtonVariant.LUMO_TERTIARY_INLINE);
-        button.setWidthFull();
-        button.getStyle()
-                .set("color", "#e2e8f0")
-                .set("justify-content", "flex-start")
-                .set("padding", "12px 16px")
-                .set("border-radius", "4px")
-                .set("transition", "background-color 0.2s");
+    // ------------------- PAGES -------------------
 
-        button.addClickListener(e -> {
-            resetMenuButtons();
-            button.getStyle().set("background-color", "#334155");
-            showSection(sectionKey);
-        });
-
-        if ("HOME".equals(sectionKey)) {
-            button.getStyle().set("background-color", "#334155");
-        }
-
-        return button;
-    }
-
-    private void resetMenuButtons() {
-        homeBtn.getStyle().remove("background-color");
-        dataBtn.getStyle().remove("background-color");
-        orderBtn.getStyle().remove("background-color");
-        riwayatBtn.getStyle().remove("background-color");
-    }
-
-    /* ========================= Sections ========================= */
-    private Div buildHomeSection() {
-        Div wrap = new Div();
+    private Component buildHome() {
+        VerticalLayout wrap = new VerticalLayout();
+        wrap.setPadding(false); 
+        wrap.setSpacing(false); 
         wrap.setWidthFull();
-        wrap.getStyle().set("padding", "24px");
 
-        // Title
-        H2 title = new H2("Status Pesanan Saat Ini");
-        title.getStyle()
-                .set("margin", "0 0 20px 0")
-                .set("color", "#1e293b");
+        H1 title = new H1("DASHBOARD PENITIP");
+        title.getStyle().set("margin", "0 0 16px 0").set("font-size", "28px").set("letter-spacing", "1px").set("color", TEXT_DARK);
 
-        // Active order card
-        Component activeCard = buildActiveCard();
+        // Status card
+        Component statusCard = buildStatusCard();
+        wrap.add(title, statusCard);
 
-        // Action buttons
+        // Quick actions
+        H3 actionsTitle = new H3("Aksi Cepat");
+        actionsTitle.getStyle().set("margin", "24px 0 16px 0").set("font-size", "20px").set("color", TEXT_DARK);
+
         HorizontalLayout actions = new HorizontalLayout();
         actions.setWidthFull();
-        actions.getStyle()
-                .set("flex-wrap", "wrap")
-                .set("gap", "16px")
-                .set("margin", "30px 0");
+        actions.setSpacing(true);
+        actions.getStyle().set("margin-bottom", "24px");
 
-        Button editData = new Button("Edit Data", new Icon(VaadinIcon.EDIT));
-        editData.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        editData.getStyle()
-                .set("background-color", "#3b82f6")
-                .set("font-size", "16px");
-        editData.setWidth("280px");
-        editData.setHeight("50px");
-        editData.addClickListener(e -> showSection("DATA"));
-
-        Button buatPesanan = new Button("Buat Pesanan", new Icon(VaadinIcon.PLUS));
-        buatPesanan.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        buatPesanan.getStyle()
-                .set("background-color", "#4f46e5")
-                .set("font-size", "16px");
-        buatPesanan.setWidth("280px");
+        Button buatPesanan = new Button("Buat Pesanan Baru", VaadinIcon.PLUS.create());
+        stylePrimary(buatPesanan);
+        buatPesanan.setWidth("200px");
         buatPesanan.setHeight("50px");
-        buatPesanan.addClickListener(e -> showSection("ORDER"));
+        buatPesanan.addClickListener(e -> switchContent("Buat Pesanan"));
 
-        actions.add(editData, buatPesanan);
+        Button editData = new Button("Edit Data", VaadinIcon.EDIT.create());
+        styleSecondary(editData);
+        editData.setWidth("200px");
+        editData.setHeight("50px");
+        editData.addClickListener(e -> switchContent("Data Pribadi"));
 
-        // History
-        H3 historyTitle = new H3("Riwayat Pesanan");
-        historyTitle.getStyle()
-                .set("margin", "30px 0 20px 0")
-                .set("color", "#1e293b");
+        actions.add(buatPesanan, editData);
 
-        setupHistoryGrid(historyGridHome);
-        historyGridHome.setWidthFull();
+        // Recent orders
+        H3 historyTitle = new H3("Pesanan Terbaru");
+        historyTitle.getStyle().set("margin", "24px 0 16px 0").set("font-size", "20px").set("color", TEXT_DARK);
 
-        wrap.add(title, activeCard, actions, historyTitle, historyGridHome);
+        Grid<Titipan> recentGrid = new Grid<>(Titipan.class, false);
+        setupRecentGrid(recentGrid);
+        recentGrid.setWidthFull();
+        recentGrid.getStyle().set("background", WHITE).set("border-radius", "8px").set("box-shadow", "0 2px 6px rgba(0,0,0,0.1)");
+
+        wrap.add(actionsTitle, actions, historyTitle, recentGrid);
+        
         return wrap;
     }
 
-    private Div buildDataSection() {
+    private Component buildStatusCard() {
         Integer userId = SessionUtils.getUserId();
-        Div wrap = new Div();
+        Titipan activeOrder = titipanDAO.getActiveByUser(userId);
+
+        Div card = new Div();
+        card.getStyle()
+                .set("background", "linear-gradient(135deg, " + PRIMARY + ", " + SLATE + ")")
+                .set("color", WHITE)
+                .set("border-radius", "16px")
+                .set("padding", "24px")
+                .set("box-shadow", "0 10px 30px rgba(0,0,0,0.15)")
+                .set("width", "100%");
+
+        if (activeOrder == null) {
+            VerticalLayout noOrder = new VerticalLayout();
+            noOrder.setAlignItems(FlexComponent.Alignment.CENTER);
+            noOrder.setSpacing(false);
+            noOrder.setPadding(false);
+
+            Icon noOrderIcon = VaadinIcon.CART.create();
+            noOrderIcon.setSize("48px");
+            noOrderIcon.setColor(WHITE);
+
+            H2 noOrderTitle = new H2("Tidak ada pesanan aktif");
+            noOrderTitle.getStyle().set("margin", "16px 0 8px 0").set("color", WHITE);
+
+            Span noOrderDesc = new Span("Buat pesanan baru untuk memulai");
+            noOrderDesc.getStyle().set("color", "rgba(255,255,255,0.8)");
+
+            noOrder.add(noOrderIcon, noOrderTitle, noOrderDesc);
+            card.add(noOrder);
+        } else {
+            HorizontalLayout layout = new HorizontalLayout();
+            layout.setAlignItems(FlexComponent.Alignment.CENTER);
+            layout.setWidthFull();
+
+            VerticalLayout orderInfo = new VerticalLayout();
+            orderInfo.setPadding(false);
+            orderInfo.setSpacing(false);
+
+            Span orderId = new Span("Pesanan #" + activeOrder.getId());
+            orderId.getStyle().set("font-size", "14px").set("color", "rgba(255,255,255,0.8)");
+
+            H2 orderTitle = new H2(activeOrder.getNama_barang() != null ? activeOrder.getNama_barang() : "Pesanan");
+            orderTitle.getStyle().set("margin", "8px 0").set("color", WHITE);
+
+            Span status = new Span(activeOrder.getStatus());
+            status.getStyle().set("font-size", "16px").set("font-weight", "600").set("color", WHITE);
+
+            orderInfo.add(orderId, orderTitle, status);
+
+            Button detailBtn = new Button("Lihat Detail", VaadinIcon.ELLIPSIS_DOTS_H.create());
+            detailBtn.getStyle()
+                    .set("background-color", "rgba(255,255,255,0.2)")
+                    .set("color", WHITE)
+                    .set("border", "none")
+                    .set("border-radius", "8px")
+                    .set("padding", "12px 20px");
+            detailBtn.addClickListener(e -> openDetailDialog(activeOrder.getId()));
+
+            layout.add(orderInfo, detailBtn);
+            layout.setFlexGrow(1, orderInfo);
+
+            card.add(layout);
+        }
+
+        return card;
+    }
+
+    private Component buildOrderSection() {
+        Integer userId = SessionUtils.getUserId();
+        VerticalLayout wrap = new VerticalLayout();
+        wrap.setPadding(false);
+        wrap.setSpacing(false);
         wrap.setWidthFull();
-        wrap.getStyle().set("padding", "24px");
+
+        H1 title = new H1("Buat Pesanan Baru");
+        title.getStyle().set("margin", "0 0 24px 0").set("font-size", "28px").set("color", TEXT_DARK);
 
         Div formContainer = new Div();
         formContainer.getStyle()
-                .set("background", "white")
+                .set("background", WHITE)
                 .set("padding", "32px")
-                .set("border-radius", "12px")
-                .set("max-width", "600px")
-                .set("margin", "0 auto")
-                .set("box-shadow", "0 4px 6px rgba(0,0,0,0.1)");
-
-        H2 title = new H2("Data Pribadi");
-        title.getStyle()
-                .set("color", "#1e293b")
-                .set("text-align", "center")
-                .set("margin-bottom", "24px");
-
-        VerticalLayout fieldsLayout = new VerticalLayout();
-        fieldsLayout.setPadding(false);
-        fieldsLayout.setSpacing(true);
-
-        TextField nisn = createEditableField("NISN", currentUser != null ? Objects.toString(currentUser.getNisn(),"") : "");
-        TextField nama = createEditableField("Nama", currentUser != null ? Objects.toString(currentUser.getName(),"") : "");
-        TextField email = createEditableField("Email", currentUser != null ? Objects.toString(currentUser.getEmail(),"") : "");
-        TextField pass = createEditableField("Password", currentUser != null ? Objects.toString(currentUser.getPassword(),"") : "");
-
-        fieldsLayout.add(
-                createFieldRow(nisn),
-                createFieldRow(nama),
-                createFieldRow(email),
-                createFieldRow(pass)
-        );
-
-        Button simpan = new Button("Simpan Perubahan", new Icon(VaadinIcon.CHECK));
-        simpan.setWidthFull();
-        simpan.setHeight("45px");
-        simpan.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        simpan.getStyle()
-                .set("background-color", "#3b82f6")
-                .set("margin-top", "24px");
-        simpan.addClickListener(e -> {
-            boolean ok = userDAO.update(
-                    userId,
-                    nisn.getValue(),
-                    nama.getValue(),
-                    email.getValue(),
-                    pass.getValue(),
-                    currentUser != null ? currentUser.getRole() : "USER"
-            );
-            Notification.show(ok ? "Data berhasil disimpan" : "Gagal menyimpan data");
-            if (ok) currentUser = userDAO.getUserById(userId);
-        });
-
-        formContainer.add(title, fieldsLayout, simpan);
-        wrap.add(formContainer);
-        return wrap;
-    }
-
-    private TextField createEditableField(String label, String value) {
-        TextField field = new TextField(label);
-        field.setValue(value);
-        field.setWidthFull();
-        field.getStyle()
-                .set("background-color", "white")
-                .set("border-radius", "6px");
-        return field;
-    }
-
-    private HorizontalLayout createFieldRow(TextField field) {
-        HorizontalLayout row = new HorizontalLayout();
-        row.setWidthFull();
-        row.setAlignItems(FlexComponent.Alignment.CENTER);
-        row.setSpacing(true);
-
-        field.setWidthFull();
-
-        Button editBtn = new Button(new Icon(VaadinIcon.EDIT));
-        editBtn.addThemeVariants(ButtonVariant.LUMO_ICON);
-        editBtn.getStyle()
-                .set("background-color", "#e2e8f0")
-                .set("color", "#1e293b")
-                .set("min-width", "40px");
-        editBtn.addClickListener(e -> {
-            boolean ro = field.isReadOnly();
-            field.setReadOnly(!ro);
-            editBtn.setIcon(new Icon(!ro ? VaadinIcon.CHECK : VaadinIcon.EDIT));
-        });
-
-        row.add(field, editBtn);
-        row.setFlexGrow(1, field);
-        return row;
-    }
-
-    private Div buildOrderSection() {
-        Integer userId = SessionUtils.getUserId();
-        Div wrap = new Div();
-        wrap.setWidthFull();
-        wrap.getStyle().set("padding", "24px");
-
-        Div formContainer = new Div();
-        formContainer.getStyle()
-                .set("background", "white")
-                .set("padding", "32px")
-                .set("border-radius", "12px")
+                .set("border-radius", "16px")
                 .set("max-width", "800px")
                 .set("margin", "0 auto")
-                .set("box-shadow", "0 4px 6px rgba(0,0,0,0.1)");
+                .set("box-shadow", "0 4px 20px rgba(0,0,0,0.1)")
+                .set("border", "1px solid " + LIGHT);
 
-        H2 title = new H2("Form Order JastipKuy");
-        title.getStyle()
-                .set("color", "#1e293b")
+        H2 formTitle = new H2("Form Order JastipKuy");
+        formTitle.getStyle()
+                .set("color", TEXT_DARK)
                 .set("text-align", "center")
-                .set("margin-bottom", "24px");
+                .set("margin-bottom", "32px")
+                .set("font-size", "24px");
 
         HorizontalLayout formLayout = new HorizontalLayout();
         formLayout.setWidthFull();
@@ -424,20 +338,24 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
         TextField namaBarang = new TextField("Nama Barang");
         namaBarang.setWidthFull();
         namaBarang.setRequired(true);
+        styleTextField(namaBarang);
 
         TextField lokasiJemput = new TextField("Lokasi Jemput");
         lokasiJemput.setWidthFull();
         lokasiJemput.setRequired(true);
+        styleTextField(lokasiJemput);
 
         TextField lokasiAntar = new TextField("Lokasi Antar");
         lokasiAntar.setWidthFull();
         lokasiAntar.setRequired(true);
+        styleTextField(lokasiAntar);
 
         NumberField biayaBarang = new NumberField("Biaya Barang (Opsional)");
         biayaBarang.setPlaceholder("Masukkan biaya barang dalam rupiah");
         biayaBarang.setWidthFull();
         biayaBarang.setMin(0);
         biayaBarang.setStep(1000);
+        styleTextField(biayaBarang);
 
         leftColumn.add(namaBarang, lokasiJemput, lokasiAntar, biayaBarang);
 
@@ -450,22 +368,25 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
         DatePicker tanggal = new DatePicker("Tanggal");
         tanggal.setWidthFull();
         tanggal.setValue(LocalDate.now());
+        styleTextField(tanggal);
 
         TextField biayaJastiper = new TextField("Biaya Jastiper");
         biayaJastiper.setWidthFull();
         biayaJastiper.setValue("Rp 2.000");
         biayaJastiper.setReadOnly(true);
+        styleTextField(biayaJastiper);
 
         TextField totalBiaya = new TextField("Total Biaya");
         totalBiaya.setWidthFull();
         totalBiaya.setReadOnly(true);
         totalBiaya.setValue("Rp 2.000");
-        
+        styleTextField(totalBiaya);
+
         // Calculate total when biaya barang changes
         biayaBarang.addValueChangeListener(event -> {
             Double biayaBarangValue = event.getValue();
             if (biayaBarangValue != null && biayaBarangValue > 0) {
-                long total = biayaBarangValue.longValue() + 2000; // 2000 is jastiper fee
+                long total = biayaBarangValue.longValue() + 2000;
                 totalBiaya.setValue("Rp " + total);
             } else {
                 totalBiaya.setValue("Rp 2.000");
@@ -481,201 +402,235 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
         buttons.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
         buttons.setWidthFull();
         buttons.setSpacing(true);
-        buttons.getStyle().set("margin-top", "24px");
+        buttons.getStyle().set("margin-top", "32px");
 
-        Button cancel = new Button("Batal", new Icon(VaadinIcon.CLOSE));
+        Button cancel = new Button("Batal", VaadinIcon.CLOSE.create());
         cancel.setWidth("150px");
         cancel.setHeight("45px");
-        cancel.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-        cancel.getStyle()
-                .set("background-color", "#e2e8f0")
-                .set("color", "#1e293b");
-        cancel.addClickListener(e -> showSection("HOME"));
+        styleSecondary(cancel);
+        cancel.addClickListener(e -> switchContent("Home"));
 
-        Button submit = new Button("Submit Order", new Icon(VaadinIcon.CHECK));
+        Button submit = new Button("Submit Order", VaadinIcon.CHECK.create());
         submit.setWidth("150px");
         submit.setHeight("45px");
-        submit.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        submit.getStyle().set("background-color", "#3b82f6");
-        submit.addClickListener(e -> {
-            // Validate required fields
-            if (namaBarang.isEmpty()) {
-                Notification.show("Nama barang harus diisi!");
-                namaBarang.focus();
-                return;
-            }
-            if (lokasiJemput.isEmpty()) {
-                Notification.show("Lokasi jemput harus diisi!");
-                lokasiJemput.focus();
-                return;
-            }
-            if (lokasiAntar.isEmpty()) {
-                Notification.show("Lokasi antar harus diisi!");
-                lokasiAntar.focus();
-                return;
-            }
-
-            try {
-                // Create titipan record
-                Titipan t = new Titipan();
-                t.setUser_id(userId);
-                t.setStatus("MENUNGGU");
-                t.setDiambil_oleh(null);
-                t.setCreated_at(new Date());
-                
-                // Biaya barang dari input, default 0 jika kosong
-                Long biayaBarangValue = 0L;
-                try {
-                    Double val = biayaBarang.getValue();
-                    if (val != null && val > 0) {
-                        biayaBarangValue = val.longValue();
-                    }
-                } catch (Exception ex) {
-                    biayaBarangValue = 0L;
-                }
-                t.setHarga_estimasi(biayaBarangValue);
-                t.setLokasi_antar(lokasiAntar.getValue());
-                t.setLokasi_jemput(lokasiJemput.getValue());
-                t.setNama_barang(namaBarang.getValue());
-
-                // Insert header and get new ID
-                int idBaru = titipanDAO.insertTitipanReturnId(t);
-                if (idBaru <= 0) {
-                    Notification.show("Gagal membuat titipan. Silakan coba lagi.");
-                    System.err.println("Failed to insert titipan for user: " + userId);
-                    return;
-                }
-
-                // Create detail record
-                TitipanDetail detail = new TitipanDetail();
-                detail.setIdTransaksi(idBaru);
-                detail.setDeskripsi(namaBarang.getValue());
-                detail.setCatatan_opsional(lokasiJemput.getValue() + " - " + lokasiAntar.getValue());
-                
-                boolean detailSuccess = detailDAO.insertDetail(detail);
-                if (!detailSuccess) {
-                    // If detail insertion fails, we should ideally rollback the titipan
-                    // For now, just show a warning
-                    Notification.show("Order dibuat dengan ID #" + idBaru + " tetapi detail tidak tersimpan");
-                    System.err.println("Failed to insert detail for titipan ID: " + idBaru);
-                } else {
-                    Notification.show("Order berhasil dibuat (#" + idBaru + ")");
-                }
-                
-                reloadHomeAndHistory();
-                showSection("HOME");
-                
-                // Clear form for next use
-                namaBarang.clear();
-                lokasiJemput.clear();
-                lokasiAntar.clear();
-                biayaBarang.clear();
-                tanggal.setValue(LocalDate.now());
-                
-            } catch (Exception ex) {
-                System.err.println("Error creating titipan: " + ex.getMessage());
-                ex.printStackTrace();
-                Notification.show("Terjadi kesalahan sistem. Silakan coba lagi atau hubungi administrator.");
-            }
-        });
+        stylePrimary(submit);
+        submit.addClickListener(e -> handleOrderSubmission(namaBarang, lokasiJemput, lokasiAntar, biayaBarang, tanggal));
 
         buttons.add(cancel, submit);
 
-        formContainer.add(title, formLayout, buttons);
-        wrap.add(formContainer);
+        formContainer.add(formTitle, formLayout, buttons);
+        wrap.add(title, formContainer);
         return wrap;
     }
 
-    private Div buildRiwayatSection() {
-        Div wrap = new Div();
+    private Component buildRiwayatSection() {
+        VerticalLayout wrap = new VerticalLayout();
+        wrap.setPadding(false);
+        wrap.setSpacing(false);
         wrap.setWidthFull();
-        wrap.getStyle().set("padding", "24px");
 
-        H2 title = new H2("Riwayat Pesanan");
-        title.getStyle()
-                .set("color", "#1e293b")
-                .set("margin-bottom", "20px");
+        H1 title = new H1("Riwayat Pesanan");
+        title.getStyle().set("margin", "0 0 24px 0").set("font-size", "28px").set("color", TEXT_DARK);
 
-        // Grid for history
-        setupHistoryGrid(historyGridFull);
-        historyGridFull.setWidthFull();
-        historyGridFull.getStyle()
-                .set("background", "white")
+        Grid<Titipan> historyGrid = new Grid<>(Titipan.class, false);
+        setupHistoryGrid(historyGrid);
+        historyGrid.setWidthFull();
+        historyGrid.getStyle()
+                .set("background", WHITE)
                 .set("border-radius", "8px")
-                .set("box-shadow", "0 4px 6px rgba(0,0,0,0.1)");
+                .set("box-shadow", "0 2px 6px rgba(0,0,0,0.1)");
 
-        wrap.add(title, historyGridFull);
+        wrap.add(title, historyGrid);
         return wrap;
     }
 
-    /* ========================= Helpers ========================= */
-    private void showSection(String key) {
-        homeSection.setVisible("HOME".equals(key));
-        dataSection.setVisible("DATA".equals(key));
-        orderSection.setVisible("ORDER".equals(key));
-        riwayatSection.setVisible("RIWAYAT".equals(key));
+    private Component buildDataSection() {
+        Integer userId = SessionUtils.getUserId();
+        VerticalLayout wrap = new VerticalLayout();
+        wrap.setPadding(false);
+        wrap.setSpacing(false);
+        wrap.setWidthFull();
+
+        H1 title = new H1("Data Pribadi");
+        title.getStyle().set("margin", "0 0 24px 0").set("font-size", "28px").set("color", TEXT_DARK);
+
+        Div formContainer = new Div();
+        formContainer.getStyle()
+                .set("background", WHITE)
+                .set("padding", "32px")
+                .set("border-radius", "16px")
+                .set("max-width", "600px")
+                .set("margin", "0 auto")
+                .set("box-shadow", "0 4px 20px rgba(0,0,0,0.1)")
+                .set("border", "1px solid " + LIGHT);
+
+        H2 formTitle = new H2("Edit Data Pribadi");
+        formTitle.getStyle()
+                .set("color", TEXT_DARK)
+                .set("text-align", "center")
+                .set("margin-bottom", "32px")
+                .set("font-size", "24px");
+
+        VerticalLayout fieldsLayout = new VerticalLayout();
+        fieldsLayout.setPadding(false);
+        fieldsLayout.setSpacing(true);
+
+        TextField nisn = createEditableField("NISN", currentUser != null ? Objects.toString(currentUser.getNisn(),"") : "");
+        TextField nama = createEditableField("Nama", currentUser != null ? Objects.toString(currentUser.getName(),"") : "");
+        TextField email = createEditableField("Email", currentUser != null ? Objects.toString(currentUser.getEmail(),"") : "");
+        TextField pass = createEditableField("Password", currentUser != null ? Objects.toString(currentUser.getPassword(),"") : "");
+
+        fieldsLayout.add(nisn, nama, email, pass);
+
+        Button simpan = new Button("Simpan Perubahan", VaadinIcon.CHECK.create());
+        simpan.setWidthFull();
+        simpan.setHeight("45px");
+        stylePrimary(simpan);
+        simpan.getStyle().set("margin-top", "24px");
+        simpan.addClickListener(e -> {
+            boolean ok = userDAO.update(
+                    userId,
+                    nisn.getValue(),
+                    nama.getValue(),
+                    email.getValue(),
+                    pass.getValue(),
+                    currentUser != null ? currentUser.getRole() : "USER"
+            );
+            Notification.show(ok ? "Data berhasil disimpan" : "Gagal menyimpan data");
+            if (ok) currentUser = userDAO.getUserById(userId);
+        });
+
+        formContainer.add(formTitle, fieldsLayout, simpan);
+        wrap.add(title, formContainer);
+        return wrap;
     }
 
-    private Component buildActiveCard() {
+    // ------------------- HELPERS -------------------
+
+    private void switchContent(String name) {
+        content.removeAll();
+        Component page = pages.getOrDefault(name, buildHome());
+        content.add(page);
+    }
+
+    private void handleOrderSubmission(TextField namaBarang, TextField lokasiJemput, TextField lokasiAntar, 
+                                    NumberField biayaBarang, DatePicker tanggal) {
         Integer userId = SessionUtils.getUserId();
-
-        Div card = new Div();
-        card.getStyle()
-                .set("padding", "24px")
-                .set("border-radius", "12px")
-                .set("background", "linear-gradient(135deg, #3b82f6, #6366f1)")
-                .set("color", "white")
-                .set("box-shadow", "0 10px 30px rgba(0,0,0,0.1)")
-                .set("width", "100%");
-
-        Titipan t = titipanDAO.getActiveByUser(userId);
-        if (t == null) {
-            Span noOrder = new Span("Tidak ada pesanan aktif saat ini.");
-            noOrder.getStyle().set("font-size", "16px");
-            card.add(noOrder);
-            return card;
+        
+        // Validate required fields
+        if (namaBarang.isEmpty()) {
+            Notification.show("Nama barang harus diisi!");
+            namaBarang.focus();
+            return;
+        }
+        if (lokasiJemput.isEmpty()) {
+            Notification.show("Lokasi jemput harus diisi!");
+            lokasiJemput.focus();
+            return;
+        }
+        if (lokasiAntar.isEmpty()) {
+            Notification.show("Lokasi antar harus diisi!");
+            lokasiAntar.focus();
+            return;
         }
 
-        String driver = (t.getDiambil_oleh() == null || t.getDiambil_oleh() == 0)
-                ? "Belum ada driver" : userDAO.getUserNameById(t.getDiambil_oleh());
-        String jam = new SimpleDateFormat("HH.mm", ID).format(t.getCreated_at());
-        String tanggal = new SimpleDateFormat("EEEE, dd MMM yyyy", ID).format(t.getCreated_at());
+        try {
+            // Create titipan record
+            Titipan t = new Titipan();
+            t.setUser_id(userId);
+            t.setStatus("MENUNGGU");
+            t.setDiambil_oleh(null);
+            t.setCreated_at(new Date());
+            
+            // Biaya barang dari input, default 0 jika kosong
+            Long biayaBarangValue = 0L;
+            try {
+                Double val = biayaBarang.getValue();
+                if (val != null && val > 0) {
+                    biayaBarangValue = val.longValue();
+                }
+            } catch (Exception ex) {
+                biayaBarangValue = 0L;
+            }
+            t.setHarga_estimasi(biayaBarangValue);
+            t.setLokasi_antar(lokasiAntar.getValue());
+            t.setLokasi_jemput(lokasiJemput.getValue());
+            t.setNama_barang(namaBarang.getValue());
 
-        HorizontalLayout layout = new HorizontalLayout();
-        layout.setAlignItems(FlexComponent.Alignment.CENTER);
-        layout.setWidthFull();
+            // Insert header and get new ID
+            int idBaru = titipanDAO.insertTitipanReturnId(t);
+            if (idBaru <= 0) {
+                Notification.show("Gagal membuat titipan. Silakan coba lagi.");
+                System.err.println("Failed to insert titipan for user: " + userId);
+                return;
+            }
 
-        VerticalLayout leftInfo = new VerticalLayout();
-        leftInfo.setPadding(false);
-        leftInfo.setSpacing(false);
+            // Create detail record
+            TitipanDetail detail = new TitipanDetail();
+            detail.setIdTransaksi(idBaru);
+            detail.setDeskripsi(namaBarang.getValue());
+            detail.setCatatan_opsional(lokasiJemput.getValue() + " - " + lokasiAntar.getValue());
+            
+            boolean detailSuccess = detailDAO.insertDetail(detail);
+            if (!detailSuccess) {
+                Notification.show("Order dibuat dengan ID #" + idBaru + " tetapi detail tidak tersimpan");
+                System.err.println("Failed to insert detail for titipan ID: " + idBaru);
+            } else {
+                Notification.show("Order berhasil dibuat (#" + idBaru + ")");
+            }
+            
+            // Clear form and switch to home
+            namaBarang.clear();
+            lokasiJemput.clear();
+            lokasiAntar.clear();
+            biayaBarang.clear();
+            tanggal.setValue(LocalDate.now());
+            
+            switchContent("Home");
+            
+        } catch (Exception ex) {
+            System.err.println("Error creating titipan: " + ex.getMessage());
+            ex.printStackTrace();
+            Notification.show("Terjadi kesalahan sistem. Silakan coba lagi atau hubungi administrator.");
+        }
+    }
 
-        Span driverInfo = new Span(driver);
-        driverInfo.getStyle().set("font-size", "16px");
+    private void setupRecentGrid(Grid<Titipan> grid) {
+        Integer userId = SessionUtils.getUserId();
+        
+        grid.removeAllColumns();
+        grid.addColumn(Titipan::getId)
+                .setHeader("ID")
+                .setWidth("80px")
+                .setFlexGrow(0);
 
-        H1 time = new H1(jam);
-        time.getStyle()
-                .set("font-size", "48px")
-                .set("font-weight", "bold")
-                .set("margin", "10px 0");
+        grid.addColumn(t -> sdf.format(t.getCreated_at()))
+                .setHeader("Tanggal")
+                .setWidth("150px");
 
-        Span statusText = new Span("DIPROSES".equalsIgnoreCase(t.getStatus()) ?
-                "Memproses pesanan" : t.getStatus());
-        statusText.getStyle().set("font-size", "18px");
+        grid.addColumn(t -> t.getNama_barang() != null ? t.getNama_barang() : "-")
+                .setHeader("Nama Barang");
 
-        leftInfo.add(driverInfo, time, statusText);
+        grid.addColumn(t -> t.getDiambil_oleh() != null && t.getDiambil_oleh() != 0 ?
+                        userDAO.getUserNameById(t.getDiambil_oleh()) : "-")
+                .setHeader("JASTIPER");
 
-        Button detailBtn = new Button("Detail", new Icon(VaadinIcon.ELLIPSIS_DOTS_H));
-        detailBtn.getStyle()
-                .set("background-color", "rgba(255,255,255,0.2)")
-                .set("color", "white")
-                .set("min-width", "120px");
-        detailBtn.addClickListener(e -> openDetailDialog(t.getId()));
+        grid.addColumn(Titipan::getStatus)
+                .setHeader("Status")
+                .setWidth("120px");
 
-        layout.add(leftInfo, detailBtn);
-        layout.setFlexGrow(1, leftInfo);
+        grid.addComponentColumn(t -> createRatingButton(t)).setHeader("Aksi")
+          .setWidth("120px")
+          .setFlexGrow(0);
 
-        card.add(layout);
-        return card;
+        grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES);
+
+        var history = titipanDAO.getHistoryByUser(userId);
+        if (history != null && !history.isEmpty()) {
+            // Show only recent 5 orders
+            List<Titipan> recentOrders = history.subList(0, Math.min(5, history.size()));
+            grid.setItems(recentOrders);
+        }
     }
 
     private void setupHistoryGrid(Grid<Titipan> grid) {
@@ -694,10 +649,6 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
         grid.addColumn(t -> t.getNama_barang() != null ? t.getNama_barang() : "-")
                 .setHeader("Nama Barang");
 
-        // Hapus kolom Customer
-        // grid.addColumn(t -> currentUser != null ? currentUser.getName() : "-")
-        //        .setHeader("Customer");
-
         grid.addColumn(t -> t.getDiambil_oleh() != null && t.getDiambil_oleh() != 0 ?
                         userDAO.getUserNameById(t.getDiambil_oleh()) : "-")
                 .setHeader("JASTIPER");
@@ -706,20 +657,9 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
                 .setHeader("Status")
                 .setWidth("120px");
 
-        grid.addComponentColumn(t -> {
-                    Button btnRate = new Button("Rating", new Icon(VaadinIcon.STAR));
-                    btnRate.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-                    btnRate.getStyle()
-                            .set("background-color", "#3b82f6")
-                            .set("font-size", "13px");
-                    boolean enableRate = "SELESAI".equalsIgnoreCase(t.getStatus())
-                            && t.getDiambil_oleh() != null && t.getDiambil_oleh() != 0;
-                    btnRate.setEnabled(enableRate);
-                    btnRate.addClickListener(e -> openRatingDialog(t));
-                    return btnRate;
-                }).setHeader("Aksi")
-                .setWidth("120px")
-                .setFlexGrow(0);
+        grid.addComponentColumn(t -> createRatingButton(t)).setHeader("Aksi")
+          .setWidth("120px")
+          .setFlexGrow(0);
 
         grid.addThemeVariants(GridVariant.LUMO_ROW_STRIPES);
 
@@ -727,29 +667,74 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
         if (history != null) grid.setItems(history);
     }
 
-    private void reloadHomeAndHistory() {
-        Integer userId = SessionUtils.getUserId();
+    private TextField createEditableField(String label, String value) {
+        TextField field = new TextField(label);
+        field.setValue(value);
+        field.setWidthFull();
+        styleTextField(field);
+        return field;
+    }
 
-        // Rebuild Home section
-        int idxHome = contentWrap.indexOf(homeSection);
-        if (idxHome >= 0) {
-            contentWrap.remove(homeSection);
-            homeSection = buildHomeSection();
-            contentWrap.addComponentAtIndex(idxHome, homeSection);
-        }
+    private void styleTextField(Component field) {
+        field.getStyle()
+                .set("background-color", WHITE)
+                .set("border-radius", "8px")
+                .set("border", "1px solid " + LIGHT);
+    }
 
-        // Refresh grids
-        var history = titipanDAO.getHistoryByUser(userId);
-        if (historyGridHome != null) historyGridHome.setItems(history);
-        if (historyGridFull != null) historyGridFull.setItems(history);
+    private void stylePrimary(Button button) {
+        button.getStyle()
+                .set("background", PRIMARY)
+                .set("color", WHITE)
+                .set("border", "none")
+                .set("border-radius", "8px")
+                .set("font-weight", "600")
+                .set("box-shadow", "0 2px 8px rgba(59, 130, 246, 0.3)");
+    }
 
-        // Rebuild Riwayat section
-        int idxR = contentWrap.indexOf(riwayatSection);
-        if (idxR >= 0) {
-            contentWrap.remove(riwayatSection);
-            riwayatSection = buildRiwayatSection();
-            contentWrap.addComponentAtIndex(idxR, riwayatSection);
-        }
+    private void styleSecondary(Button button) {
+        button.getStyle()
+                .set("background", WHITE)
+                .set("color", TEXT_DARK)
+                .set("border", "1px solid " + LIGHT)
+                .set("border-radius", "8px")
+                .set("font-weight", "600");
+    }
+
+    private Div sideItem(String label, Runnable onClick) {
+        Div item = new Div(); 
+        item.setText(label);
+        item.getStyle()
+                .set("padding", "16px 20px")
+                .set("border-top", "1px solid rgba(255,255,255,.08)")
+                .set("cursor", "pointer")
+                .set("font-weight", "600")
+                .set("transition", "background-color 0.2s");
+        item.addClickListener(e -> { 
+            onClick.run(); 
+            highlight(item); 
+        });
+        return item;
+    }
+
+    private void highlight(Div current) {
+        // reset all siblings
+        current.getParent().ifPresent(parent -> 
+            parent.getChildren().forEach(c -> c.getElement().getStyle().remove("background"))
+        );
+        current.getStyle().set("background", "rgba(255,255,255,.10)");
+    }
+
+    private static Div circle(int sizePx, String bg) {
+        Div d = new Div();
+        d.getStyle()
+                .set("width", sizePx + "px")
+                .set("height", sizePx + "px")
+                .set("border-radius", "999px")
+                .set("background", bg)
+                .set("border", "6px solid " + WHITE)
+                .set("box-shadow", "0 2px 6px rgba(0,0,0,.08)");
+        return d;
     }
 
     private void openDetailDialog(int titipanId) {
@@ -758,16 +743,15 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
         dialog.setHeight("400px");
 
         H3 header = new H3("Detail Titipan #" + titipanId);
-        header.getStyle().set("color", "#1e293b");
+        header.getStyle().set("color", TEXT_DARK);
 
         Grid<TitipanDetail> grid = new Grid<>(TitipanDetail.class, false);
         grid.addColumn(TitipanDetail::getDeskripsi).setHeader("Deskripsi");
         grid.addColumn(TitipanDetail::getCatatan_opsional).setHeader("Catatan");
         grid.setItems(detailDAO.getDetailsByTransaksiId(titipanId));
 
-        Button close = new Button("Tutup", new Icon(VaadinIcon.CLOSE), e -> dialog.close());
-        close.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        close.getStyle().set("background-color", "#3b82f6");
+        Button close = new Button("Tutup", VaadinIcon.CLOSE.create(), e -> dialog.close());
+        stylePrimary(close);
 
         VerticalLayout box = new VerticalLayout(header, grid, close);
         box.setAlignItems(FlexComponent.Alignment.END);
@@ -775,55 +759,7 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
         dialog.open();
     }
 
-    private void openRatingDialog(Titipan t) {
-        Integer userId = SessionUtils.getUserId();
 
-        Dialog dialog = new Dialog();
-        dialog.setWidth("500px");
-
-        H3 title = new H3("Beri Rating JASTIPER");
-        title.getStyle().set("color", "#1e293b");
-
-        String driverName = (t.getDiambil_oleh() == null || t.getDiambil_oleh() == 0)
-                ? "-" : userDAO.getUserNameById(t.getDiambil_oleh());
-        Span s1 = new Span("Nama JASTIPER: " + driverName);
-        s1.getStyle().set("font-weight", "500");
-
-        NumberField rating = new NumberField("Rating (1-10)");
-        rating.setMin(1);
-        rating.setMax(10);
-        rating.setStep(1);
-        rating.setValue(5d);
-        rating.setWidth("120px");
-
-        TextArea saran = new TextArea("Saran/Komentar");
-        saran.setWidthFull();
-        saran.setHeight("120px");
-
-        HorizontalLayout buttons = new HorizontalLayout();
-        buttons.setSpacing(true);
-        buttons.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
-
-        Button cancel = new Button("Batal", new Icon(VaadinIcon.CLOSE), e -> dialog.close());
-        cancel.addThemeVariants(ButtonVariant.LUMO_TERTIARY);
-
-        Button submit = new Button("Submit", new Icon(VaadinIcon.CHECK), e -> {
-            int r = rating.getValue() == null ? 0 : rating.getValue().intValue();
-            boolean ok1 = ratingDAO.insertRating(t.getDiambil_oleh(), r);
-            boolean ok2 = laporanDAO.insertLaporan(userId, t.getDiambil_oleh(), saran.getValue());
-            Notification.show((ok1 && ok2) ? "Terima kasih atas rating Anda!" : "Gagal menyimpan rating");
-            dialog.close();
-        });
-        submit.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
-        submit.getStyle().set("background-color", "#3b82f6");
-
-        buttons.add(cancel, submit);
-
-        VerticalLayout content = new VerticalLayout(title, s1, rating, saran, buttons);
-        content.setPadding(false);
-        dialog.add(content);
-        dialog.open();
-    }
 
     @Override
     public void beforeEnter(BeforeEnterEvent event) {
@@ -831,7 +767,7 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
         String userRole = SessionUtils.getUserRole();
 
         if (userId == null) {
-            event.rerouteTo("login"); // belum login, balik ke login
+            event.rerouteTo("login");
             return;
         }
 
@@ -841,15 +777,196 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
             } else if ("Jastiper".equalsIgnoreCase(userRole)) {
                 event.rerouteTo("jastiper");
             } else {
-                event.rerouteTo(""); // fallback ke home
+                event.rerouteTo("");
             }
         }
     }
-
 
     private String formatRupiah(Long amount) {
         if (amount == null) return "-";
         return rupiah.format(amount).replace(",00", "");
     }
 
+    // ------------------- REVIEW SYSTEM -------------------
+    
+    private void openRatingDialog(Titipan t) {
+        Integer userId = SessionUtils.getUserId();
+
+        // Additional safety check - prevent rating if already rated
+        if (hasUserRatedJastiperForOrder(userId, t.getDiambil_oleh(), t.getId())) {
+            Notification.show("Anda sudah memberikan rating untuk jastiper ini!");
+            return;
+        }
+
+        Dialog dialog = new Dialog();
+        dialog.setWidth("500px");
+
+        H3 title = new H3("Beri Rating JASTIPER");
+        title.getStyle().set("color", TEXT_DARK);
+
+        String driverName = (t.getDiambil_oleh() == null || t.getDiambil_oleh() == 0)
+                ? "-" : userDAO.getUserNameById(t.getDiambil_oleh());
+        Span s1 = new Span("Nama JASTIPER: " + driverName);
+        s1.getStyle().set("font-weight", "500");
+
+        // Rating 1-10 scale
+        VerticalLayout ratingContainer = new VerticalLayout();
+        ratingContainer.setPadding(false);
+        ratingContainer.setSpacing(false);
+        
+        Span ratingLabel = new Span("Rating (1-10):");
+        ratingLabel.getStyle().set("font-weight", "600").set("margin-bottom", "8px");
+        
+        NumberField ratingField = new NumberField();
+        ratingField.setMin(1);
+        ratingField.setMax(10);
+        ratingField.setValue(10.0); // Default to 10
+        ratingField.setWidth("100px");
+        ratingField.setPlaceholder("1-10");
+        styleTextField(ratingField);
+        
+        ratingContainer.add(ratingLabel, ratingField);
+
+        TextArea saran = new TextArea("Saran/Komentar");
+        saran.setWidthFull();
+        saran.setHeight("120px");
+        styleTextField(saran);
+
+        HorizontalLayout buttons = new HorizontalLayout();
+        buttons.setSpacing(true);
+        buttons.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
+
+        Button cancel = new Button("Batal", VaadinIcon.CLOSE.create(), e -> dialog.close());
+        styleSecondary(cancel);
+
+        Button submit = new Button("Submit", VaadinIcon.CHECK.create(), e -> {
+            Double ratingValue = ratingField.getValue();
+            if (ratingValue == null || ratingValue < 1 || ratingValue > 10) {
+                Notification.show("Rating harus antara 1-10!");
+                return;
+            }
+            
+            int rating = ratingValue.intValue();
+            String comment = saran.getValue();
+            
+            boolean ratingSuccess = ratingDAO.insertRating(t.getDiambil_oleh(), rating);
+            boolean commentSuccess = laporanDAO.insertLaporan(userId, t.getDiambil_oleh(), comment);
+            
+            if (ratingSuccess && commentSuccess) {
+                Notification.show("Terima kasih atas rating Anda! Anda tidak dapat memberikan rating lagi untuk jastiper ini.");
+                // Refresh the grid to show updated data
+                refreshGrids();
+            } else {
+                Notification.show("Gagal menyimpan rating. Silakan coba lagi.");
+            }
+            
+            dialog.close();
+        });
+        stylePrimary(submit);
+
+        buttons.add(cancel, submit);
+
+        VerticalLayout content = new VerticalLayout(title, s1, ratingContainer, saran, buttons);
+        content.setPadding(false);
+        dialog.add(content);
+        dialog.open();
+    }
+    
+    private void refreshGrids() {
+        // Refresh the current page content
+        String currentPageName = getCurrentPageName();
+        switchContent(currentPageName);
+    }
+    
+    private String getCurrentPageName() {
+        // Determine current page based on content
+        if (content.getComponentCount() > 0) {
+            Component currentPage = content.getComponentAt(0);
+            if (currentPage instanceof VerticalLayout) {
+                // Check for specific elements to identify page
+                VerticalLayout page = (VerticalLayout) currentPage;
+                if (page.getComponentCount() > 0) {
+                    Component firstComponent = page.getComponentAt(0);
+                    if (firstComponent instanceof H1) {
+                        H1 title = (H1) firstComponent;
+                        String titleText = title.getText();
+                        if (titleText.contains("DASHBOARD")) return "Home";
+                        if (titleText.contains("Buat Pesanan")) return "Buat Pesanan";
+                        if (titleText.contains("Riwayat")) return "Riwayat Pesanan";
+                        if (titleText.contains("Data Pribadi")) return "Data Pribadi";
+                    }
+                }
+            }
+        }
+        return "Home";
+    }
+    
+    // Check if user already rated a specific jastiper for a specific order
+    private boolean hasUserRatedJastiper(Integer userId, Integer jastiperId, Integer titipanId) {
+        try {
+            // Check if there's a laporan (comment) from this user to this jastiper
+            // Since the current database structure doesn't store who gave the rating,
+            // we'll use the laporan table as the primary indicator
+            boolean hasComment = laporanDAO.hasUserCommentedJastiper(userId, jastiperId);
+            
+            // For now, we'll consider a comment as sufficient evidence of rating
+            // In a more complete system, you'd also check the rating table
+            return hasComment;
+        } catch (Exception e) {
+            System.err.println("Error checking if user rated jastiper: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    // More specific check - check if user rated this specific jastiper for this specific order
+    private boolean hasUserRatedJastiperForOrder(Integer userId, Integer jastiperId, Integer titipanId) {
+        try {
+            // Check if there's a laporan (comment) from this user to this jastiper
+            // This is the most reliable way to check with the current database structure
+            boolean hasComment = laporanDAO.hasUserCommentedJastiper(userId, jastiperId);
+            return hasComment;
+        } catch (Exception e) {
+            System.err.println("Error checking if user rated jastiper for order: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    // Helper method to create rating button with proper state
+    private Button createRatingButton(Titipan t) {
+        Button btnRate = new Button("Rating 1-10", VaadinIcon.STAR.create());
+        stylePrimary(btnRate);
+        btnRate.getStyle().set("font-size", "13px");
+        
+        // Check if order is completed and has a jastiper
+        boolean orderCompleted = "SELESAI".equalsIgnoreCase(t.getStatus())
+                && t.getDiambil_oleh() != null && t.getDiambil_oleh() != 0;
+        
+        if (!orderCompleted) {
+            // Order not yet completed
+            btnRate.setText("Belum Selesai");
+            btnRate.getStyle().set("background", WARNING);
+            btnRate.setEnabled(false);
+            return btnRate;
+        }
+        
+        // Check if user already rated this jastiper
+        boolean alreadyRated = hasUserRatedJastiperForOrder(SessionUtils.getUserId(), t.getDiambil_oleh(), t.getId());
+        
+        if (alreadyRated) {
+            // User already rated this jastiper
+            btnRate.setText("Sudah Rating");
+            btnRate.getStyle().set("background", SUCCESS);
+            btnRate.setEnabled(false);
+        } else {
+            // User can rate this jastiper
+            btnRate.setText("Rating 1-10");
+            btnRate.getStyle().set("background", PRIMARY);
+            btnRate.setEnabled(true);
+            btnRate.addClickListener(e -> openRatingDialog(t));
+        }
+        
+        return btnRate;
+    }
+    
+    // ------------------- DATA CLASSES -------------------
 }

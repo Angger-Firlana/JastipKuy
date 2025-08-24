@@ -251,4 +251,19 @@ public class TitipanDAO {
         }
         return list;
     }
+
+    /** 🔹 Tambahan: ambil semua pesanan yang diambil oleh jastiper tertentu */
+    public List<Titipan> getOrdersByJastiper(int jastiperId) {
+        List<Titipan> list = new ArrayList<>();
+        String sql = "SELECT * FROM titipan WHERE diambil_oleh=? ORDER BY created_at DESC";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, jastiperId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) list.add(mapRow(rs));
+            }
+        } catch (SQLException e) {
+            System.out.println("getOrdersByJastiper Error: " + e.getMessage());
+        }
+        return list;
+    }
 }

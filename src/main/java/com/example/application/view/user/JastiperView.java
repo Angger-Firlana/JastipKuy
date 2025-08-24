@@ -29,6 +29,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.IntStream;
+import java.util.Calendar;
 
 @PageTitle("JastipKuy • Dashboard")
 @Route("jastiper")
@@ -188,13 +189,66 @@ public class JastiperView extends Div{
 
         // Left accent bar
         Div accent = new Div(); accent.getStyle().set("width", "48px").set("background", SLATE).set("border-radius", "8px 0 0 8px");
-        // Simple column bars with dummy data
-        Div bars = new Div(); bars.getStyle().set("display", "flex").set("align-items", "end").set("gap", "14px")
-                .set("padding", "24px").set("width", "100%");
-        Random r = new Random(7);
-        IntStream.range(0, 8).forEach(i -> bars.add(bar(24, 220, 60 + r.nextInt(160))));
+        // Chart content
+        VerticalLayout chartContent = new VerticalLayout();
+        chartContent.setPadding(true);
+        chartContent.setSpacing(false);
+        chartContent.setWidthFull();
+        chartContent.getStyle().set("background", WHITE).set("border-radius", "0 8px 8px 0");
 
-        chartCard.add(accent, bars);
+        // Chart title
+        H4 chartSubTitle = new H4("Pesanan Sukses per Bulan");
+        chartSubTitle.getStyle().set("margin", "0 0 16px 0").set("color", TEXT_DARK);
+
+        // Bars container
+        HorizontalLayout barsContainer = new HorizontalLayout();
+        barsContainer.setWidthFull();
+        barsContainer.setAlignItems(FlexComponent.Alignment.END);
+        barsContainer.setSpacing(true);
+        barsContainer.getStyle().set("margin-top", "auto");
+
+        // Get real data for chart
+        List<ChartData> chartData = getChartData();
+        
+        // Create bars based on real data
+        for (ChartData data : chartData) {
+            VerticalLayout barGroup = new VerticalLayout();
+            barGroup.setAlignItems(FlexComponent.Alignment.CENTER);
+            barGroup.setSpacing(false);
+            barGroup.setPadding(false);
+
+            // Bar
+            Div bar = new Div();
+            int barHeight = Math.max(20, (int) (data.count * 20)); // Scale factor
+            bar.getStyle()
+                    .set("width", "24px")
+                    .set("height", barHeight + "px")
+                    .set("background", NAVY)
+                    .set("border-radius", "6px 6px 0 0")
+                    .set("margin-bottom", "8px");
+
+            // Label
+            Span label = new Span(data.month);
+            label.getStyle()
+                    .set("font-size", "12px")
+                    .set("color", TEXT_DARK)
+                    .set("font-weight", "500");
+
+            // Count
+            Span count = new Span(String.valueOf(data.count));
+            count.getStyle()
+                    .set("font-size", "10px")
+                    .set("color", SLATE)
+                    .set("font-weight", "600");
+
+            barGroup.add(bar, label, count);
+            barsContainer.add(barGroup);
+        }
+
+        chartContent.add(chartSubTitle, barsContainer);
+        chartContent.setFlexGrow(1, barsContainer);
+
+        chartCard.add(accent, chartContent);
         chartWrap.add(chartTitle, chartCard);
 
         bottom.add(btns, chartWrap); bottom.setFlexGrow(0, btns); bottom.setFlexGrow(1, chartWrap);
@@ -351,7 +405,7 @@ public class JastiperView extends Div{
         grid.addColumn(p -> "Rp " + fnum(p.pendapatan)).setHeader("Pendapatan").setAutoWidth(true);
         grid.addColumn(p -> "Rp " + fnum(p.biaya)).setHeader("Biaya").setAutoWidth(true);
         grid.addColumn(p -> "Rp " + fnum(p.pendapatan - p.biaya)).setHeader("Net").setAutoWidth(true);
-        List<Pendapatan> data = dummyPendapatan();
+        List<Pendapatan> data = getRealPendapatan();
         grid.setItems(data);
         grid.setAllRowsVisible(true);
 
@@ -371,16 +425,31 @@ public class JastiperView extends Div{
     private Component buildRiwayat() {
         VerticalLayout wrap = section("Riwayat dan Ulasan");
 
-        Grid<Ulasan> grid = new Grid<>(Ulasan.class, false);
-        grid.addColumn(u -> u.orderId).setHeader("Order").setAutoWidth(true);
-        grid.addColumn(u -> u.nama).setHeader("Pengulas").setAutoWidth(true);
-        grid.addColumn(u -> "★".repeat(u.rating)).setHeader("Rating").setAutoWidth(true);
-        grid.addColumn(u -> u.komentar).setHeader("Komentar").setFlexGrow(1);
-        grid.addColumn(u -> u.tanggal.toString()).setHeader("Tanggal").setAutoWidth(true);
-        grid.setItems(dummyUlasan());
-        grid.setAllRowsVisible(true);
+        // Get real review data for this jastiper
+        List<Ulasan> realReviews = getRealReviews();
+        
+        if (realReviews.isEmpty()) {
+            Div noReviews = new Div();
+            noReviews.setText("Belum ada ulasan untuk Anda");
+            noReviews.getStyle()
+                    .set("text-align", "center")
+                    .set("padding", "40px")
+                    .set("color", SLATE)
+                    .set("font-style", "italic");
+            wrap.add(noReviews);
+        } else {
+            Grid<Ulasan> grid = new Grid<>(Ulasan.class, false);
+            grid.addColumn(u -> u.orderId).setHeader("Order").setAutoWidth(true);
+            grid.addColumn(u -> u.nama).setHeader("Pengulas").setAutoWidth(true);
+            grid.addColumn(u -> String.valueOf(u.rating) + "/10").setHeader("Rating").setAutoWidth(true);
+            grid.addColumn(u -> u.komentar).setHeader("Komentar").setFlexGrow(1);
+            grid.addColumn(u -> u.tanggal.toString()).setHeader("Tanggal").setAutoWidth(true);
+            grid.setItems(realReviews);
+            grid.setAllRowsVisible(true);
 
-        wrap.add(grid);
+            wrap.add(grid);
+        }
+        
         return wrap;
     }
 
@@ -484,20 +553,142 @@ public class JastiperView extends Div{
         return l;
     }
 
+    private List<Pendapatan> getRealPendapatan() {
+        Integer jastiperId = SessionUtils.getUserId();
+        List<Pendapatan> pendapatanList = new ArrayList<>();
+        
+        try {
+            // Get all completed orders for this jastiper
+            List<Titipan> completedOrders = titipanDAO.getOrdersByJastiper(jastiperId);
+            if (completedOrders != null) {
+                for (Titipan order : completedOrders) {
+                    if ("SELESAI".equalsIgnoreCase(order.getStatus())) {
+                        // Calculate income: 10% of harga_estimasi (or fixed fee if no harga_estimasi)
+                        long pendapatan = 0;
+                        if (order.getHarga_estimasi() != null && order.getHarga_estimasi() > 0) {
+                            pendapatan = (long) (order.getHarga_estimasi() * 0.1); // 10% fee
+                        } else {
+                            pendapatan = 2000; // Fixed fee of Rp 2,000
+                        }
+                        
+                        // Biaya operasional (transport, etc.)
+                        long biaya = 5000; // Fixed operational cost
+                        
+                        // Convert Date to LocalDate
+                        LocalDate tanggal = order.getCreated_at().toInstant()
+                                .atZone(java.time.ZoneId.systemDefault())
+                                .toLocalDate();
+                        
+                        pendapatanList.add(new Pendapatan(
+                            tanggal,
+                            "#" + order.getId(),
+                            "Fee pesanan " + (order.getNama_barang() != null ? order.getNama_barang() : "Barang"),
+                            pendapatan,
+                            biaya
+                        ));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error getting real pendapatan: " + e.getMessage());
+        }
+        
+        // If no real data, return empty list
+        return pendapatanList;
+    }
+
     private List<Ulasan> dummyUlasan() {
         return Arrays.asList(
-                new Ulasan("#1010", "Rina", 5, "Cepat & ramah, recommended!", LocalDate.now().minusDays(4)),
-                new Ulasan("#1012", "Andi", 4, "Barang aman, packing rapi.", LocalDate.now().minusDays(3)),
-                new Ulasan("#1014", "Budi", 5, "Mantap sesuai request.", LocalDate.now().minusDays(2)),
-                new Ulasan("#1015", "Maya", 3, "Sedikit telat tapi oke.", LocalDate.now().minusDays(1))
+                new Ulasan("#1010", "Rina", 5, "Cepat & ramah, recommended!", new java.util.Date()),
+                new Ulasan("#1012", "Andi", 4, "Barang aman, packing rapi.", new java.util.Date()),
+                new Ulasan("#1014", "Budi", 5, "Mantap sesuai request.", new java.util.Date()),
+                new Ulasan("#1015", "Maya", 3, "Sedikit telat tapi oke.", new java.util.Date())
         );
     }
 
+    // ------------------- CHART DATA -------------------
+    
+    private List<ChartData> getChartData() {
+        Integer userId = SessionUtils.getUserId();
+        List<ChartData> data = new ArrayList<>();
+        
+        // Get orders for the last 6 months
+        Calendar cal = Calendar.getInstance();
+        String[] monthNames = {"Jan", "Feb", "Mar", "Apr", "Mei", "Jun", 
+                              "Jul", "Ags", "Sep", "Okt", "Nov", "Des"};
+        
+        for (int i = 5; i >= 0; i--) {
+            cal.add(Calendar.MONTH, -i);
+            int month = cal.get(Calendar.MONTH);
+            int year = cal.get(Calendar.YEAR);
+            
+            // Count successful orders for this month
+            int count = countSuccessfulOrdersByMonth(userId, month + 1, year);
+            
+            data.add(new ChartData(monthNames[month], count));
+            
+            // Reset calendar for next iteration
+            cal = Calendar.getInstance();
+        }
+        
+        return data;
+    }
+    
+    private int countSuccessfulOrdersByMonth(Integer userId, int month, int year) {
+        try {
+            // Get all orders taken by this jastiper
+            List<Titipan> allOrders = titipanDAO.getOrdersByJastiper(userId);
+            if (allOrders == null) return 0;
+            
+            // Filter by month, year, and status SELESAI
+            return (int) allOrders.stream()
+                    .filter(order -> {
+                        Calendar orderCal = Calendar.getInstance();
+                        orderCal.setTime(order.getCreated_at());
+                        return orderCal.get(Calendar.MONTH) + 1 == month && 
+                               orderCal.get(Calendar.YEAR) == year &&
+                               "SELESAI".equalsIgnoreCase(order.getStatus());
+                    })
+                    .count();
+        } catch (Exception e) {
+            System.err.println("Error counting successful orders by month: " + e.getMessage());
+            return 0;
+        }
+    }
+    
+    private List<Ulasan> getRealReviews() {
+        Integer jastiperId = SessionUtils.getUserId();
+        List<Ulasan> reviews = new ArrayList<>();
+        
+        try {
+            // Get all ratings for this jastiper
+            List<RatingDAO.RatingData> ratings = ratingDAO.getRatingsByJastiper(jastiperId);
+            if (ratings != null) {
+                for (RatingDAO.RatingData rating : ratings) {
+                    // Since the current database structure doesn't store who gave the rating,
+                    // we'll show a simplified review
+                    Integer titipanId = rating.titipanId;
+                    if (titipanId != null) {
+                        String userName = "User";
+                        String comment = "Rating: " + rating.rating + "/10";
+                        
+                        reviews.add(new Ulasan("#" + titipanId, userName, rating.rating, comment, rating.date));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error getting real reviews: " + e.getMessage());
+        }
+        
+        return reviews;
+    }
+    
     // ------------------- MODELS -------------------
     private String formatRupiah(Long amount) {
         if (amount == null) return "-";
         return rupiah.format(amount).replace(",00", "");
     }
     public record Pendapatan(LocalDate tanggal, String orderId, String deskripsi, long pendapatan, long biaya) {}
-    public record Ulasan(String orderId, String nama, int rating, String komentar, LocalDate tanggal) {}
+    public record Ulasan(String orderId, String nama, int rating, String komentar, java.util.Date tanggal) {}
+    public record ChartData(String month, int count) {}
 }
