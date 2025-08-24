@@ -101,6 +101,16 @@ public class LandingPage extends Div {
             logoutBtn.addThemeVariants(ButtonVariant.LUMO_PRIMARY, ButtonVariant.LUMO_ERROR);
             logoutBtn.getStyle()
                     .set("font-size", "1rem");
+            logoutBtn.addClickListener(e -> {
+                try {
+                    // Clear session and navigate to login
+                    com.example.application.session.SessionUtils.clearSession();
+                    UI.getCurrent().navigate("login");
+                } catch (Exception ex) {
+                    // Fallback navigation if session clearing fails
+                    UI.getCurrent().navigate("login");
+                }
+            });
 
             userActions.add(profileBtn, logoutBtn);
         } else {

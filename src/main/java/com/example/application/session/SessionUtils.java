@@ -29,7 +29,24 @@ public class SessionUtils {
 
     // hapus session (logout)
     public static void clearSession() {
-        VaadinSession.getCurrent().getSession().invalidate();
-        VaadinSession.getCurrent().close();
+        try {
+            VaadinSession currentSession = VaadinSession.getCurrent();
+            if (currentSession != null) {
+                // Clear session attributes first
+                currentSession.setAttribute(KEY_USER_ID, null);
+                currentSession.setAttribute(KEY_USER_ROLE, null);
+                
+                // Invalidate the underlying HTTP session
+                if (currentSession.getSession() != null) {
+                    currentSession.getSession().invalidate();
+                }
+                
+                // Close the Vaadin session
+                currentSession.close();
+            }
+        } catch (Exception e) {
+            // Log error but don't throw - ensure logout always works
+            System.err.println("Error clearing session: " + e.getMessage());
+        }
     }
 }

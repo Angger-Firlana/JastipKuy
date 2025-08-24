@@ -38,7 +38,6 @@ import java.util.*;
 @PageTitle("Dashboard User | JastipKuy")
 public class UserDashboardView extends HorizontalLayout implements BeforeEnterObserver {
 
-    // DAO
     private final TitipanDAO titipanDAO = new TitipanDAO();
     private final TitipanDetailDAO detailDAO = new TitipanDetailDAO();
     private final UserDAO userDAO = new UserDAO();
@@ -71,6 +70,13 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
         getStyle().set("overflow", "hidden"); // Prevent double scroll
         Integer userId = SessionUtils.getUserId();
         if (userId == null) {
+            UI.getCurrent().navigate("login");
+            return;
+        }
+
+        // Load current user data
+        currentUser = userDAO.getUserById(userId);
+        if (currentUser == null) {
             UI.getCurrent().navigate("login");
             return;
         }
@@ -181,9 +187,17 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
                 .set("padding", "12px 16px")
                 .set("border-top", "1px solid #334155");
         logoutBtn.addClickListener(e -> {
-            SessionUtils.clearSession();
-            UI.getCurrent().navigate("login");
-
+            try {
+                SessionUtils.clearSession();
+                UI.getCurrent().navigate("login");
+            } catch (Exception ex) {
+                // Fallback logout - clear session manually and navigate
+                try {
+                    VaadinSession.getCurrent().setAttribute("idUser", null);
+                    VaadinSession.getCurrent().setAttribute("userRole", null);
+                } catch (Exception ignored) {}
+                UI.getCurrent().navigate("login");
+            }
         });
 
         sidebar.add(logoLayout, profileLayout, menuLayout, logoutBtn);
@@ -419,10 +433,11 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
         lokasiAntar.setWidthFull();
         lokasiAntar.setRequired(true);
 
-        TextArea biayaBarang = new TextArea("Biaya Barang (Opsional)");
-        biayaBarang.setPlaceholder("Jika belum dibayar, kosongkan saja");
+        NumberField biayaBarang = new NumberField("Biaya Barang (Opsional)");
+        biayaBarang.setPlaceholder("Masukkan biaya barang dalam rupiah");
         biayaBarang.setWidthFull();
-        biayaBarang.setHeight("100px");
+        biayaBarang.setMin(0);
+        biayaBarang.setStep(1000);
 
         leftColumn.add(namaBarang, lokasiJemput, lokasiAntar, biayaBarang);
 
@@ -444,6 +459,18 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
         TextField totalBiaya = new TextField("Total Biaya");
         totalBiaya.setWidthFull();
         totalBiaya.setReadOnly(true);
+        totalBiaya.setValue("Rp 2.000");
+        
+        // Calculate total when biaya barang changes
+        biayaBarang.addValueChangeListener(event -> {
+            Double biayaBarangValue = event.getValue();
+            if (biayaBarangValue != null && biayaBarangValue > 0) {
+                long total = biayaBarangValue.longValue() + 2000; // 2000 is jastiper fee
+                totalBiaya.setValue("Rp " + total);
+            } else {
+                totalBiaya.setValue("Rp 2.000");
+            }
+        });
 
         rightColumn.add(tanggal, biayaJastiper, totalBiaya);
 
@@ -471,49 +498,85 @@ public class UserDashboardView extends HorizontalLayout implements BeforeEnterOb
         submit.addThemeVariants(ButtonVariant.LUMO_PRIMARY);
         submit.getStyle().set("background-color", "#3b82f6");
         submit.addClickListener(e -> {
-            if (namaBarang.isEmpty() || lokasiJemput.isEmpty() || lokasiAntar.isEmpty()) {
-                Notification.show("Harap lengkapi semua field yang wajib diisi!");
+            // Validate required fields
+            if (namaBarang.isEmpty()) {
+                Notification.show("Nama barang harus diisi!");
+                namaBarang.focus();
+                return;
+            }
+            if (lokasiJemput.isEmpty()) {
+                Notification.show("Lokasi jemput harus diisi!");
+                lokasiJemput.focus();
+                return;
+            }
+            if (lokasiAntar.isEmpty()) {
+                Notification.show("Lokasi antar harus diisi!");
+                lokasiAntar.focus();
                 return;
             }
 
-            // Create titipan record
-            Titipan t = new Titipan();
-            t.setUser_id(userId);
-            t.setStatus("MENUNGGU");
-            t.setDiambil_oleh(null);
-            t.setCreated_at(new Date());
-            // Biaya barang dari input, default 0 jika kosong
-            Long biayaBarangValue = 0L;
             try {
-                String val = biayaBarang.getValue();
-                if (val != null && !val.trim().isEmpty()) {
-                    biayaBarangValue = Long.parseLong(val.replaceAll("[^0-9]", ""));
+                // Create titipan record
+                Titipan t = new Titipan();
+                t.setUser_id(userId);
+                t.setStatus("MENUNGGU");
+                t.setDiambil_oleh(null);
+                t.setCreated_at(new Date());
+                
+                // Biaya barang dari input, default 0 jika kosong
+                Long biayaBarangValue = 0L;
+                try {
+                    Double val = biayaBarang.getValue();
+                    if (val != null && val > 0) {
+                        biayaBarangValue = val.longValue();
+                    }
+                } catch (Exception ex) {
+                    biayaBarangValue = 0L;
                 }
+                t.setHarga_estimasi(biayaBarangValue);
+                t.setLokasi_antar(lokasiAntar.getValue());
+                t.setLokasi_jemput(lokasiJemput.getValue());
+                t.setNama_barang(namaBarang.getValue());
+
+                // Insert header and get new ID
+                int idBaru = titipanDAO.insertTitipanReturnId(t);
+                if (idBaru <= 0) {
+                    Notification.show("Gagal membuat titipan. Silakan coba lagi.");
+                    System.err.println("Failed to insert titipan for user: " + userId);
+                    return;
+                }
+
+                // Create detail record
+                TitipanDetail detail = new TitipanDetail();
+                detail.setIdTransaksi(idBaru);
+                detail.setDeskripsi(namaBarang.getValue());
+                detail.setCatatan_opsional(lokasiJemput.getValue() + " - " + lokasiAntar.getValue());
+                
+                boolean detailSuccess = detailDAO.insertDetail(detail);
+                if (!detailSuccess) {
+                    // If detail insertion fails, we should ideally rollback the titipan
+                    // For now, just show a warning
+                    Notification.show("Order dibuat dengan ID #" + idBaru + " tetapi detail tidak tersimpan");
+                    System.err.println("Failed to insert detail for titipan ID: " + idBaru);
+                } else {
+                    Notification.show("Order berhasil dibuat (#" + idBaru + ")");
+                }
+                
+                reloadHomeAndHistory();
+                showSection("HOME");
+                
+                // Clear form for next use
+                namaBarang.clear();
+                lokasiJemput.clear();
+                lokasiAntar.clear();
+                biayaBarang.clear();
+                tanggal.setValue(LocalDate.now());
+                
             } catch (Exception ex) {
-                biayaBarangValue = 0L;
+                System.err.println("Error creating titipan: " + ex.getMessage());
+                ex.printStackTrace();
+                Notification.show("Terjadi kesalahan sistem. Silakan coba lagi atau hubungi administrator.");
             }
-            t.setHarga_estimasi(biayaBarangValue);
-            t.setLokasi_antar(lokasiAntar.getValue());
-            t.setLokasi_jemput(lokasiJemput.getValue());
-            t.setNama_barang(namaBarang.getValue());
-
-            // Insert header and get new ID
-            int idBaru = titipanDAO.insertTitipanReturnId(t);
-            if (idBaru <= 0) {
-                Notification.show("Gagal membuat titipan");
-                return;
-            }
-
-            // Create detail record
-            TitipanDetail detail = new TitipanDetail();
-            detail.setIdTransaksi(idBaru);
-            detail.setDeskripsi(namaBarang.getValue());
-            detail.setCatatan_opsional(lokasiJemput.getValue() + " - " + lokasiAntar.getValue());
-            detailDAO.insertDetail(detail);
-
-            Notification.show("Order berhasil dibuat (#" + idBaru + ")");
-            reloadHomeAndHistory();
-            showSection("HOME");
         });
 
         buttons.add(cancel, submit);

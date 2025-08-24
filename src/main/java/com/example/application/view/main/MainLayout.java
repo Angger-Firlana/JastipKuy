@@ -36,6 +36,7 @@ import com.vaadin.flow.component.tabs.Tabs;
 import com.vaadin.flow.component.tabs.TabsVariant;
 import com.vaadin.flow.router.Route;
 import com.vaadin.flow.server.VaadinSession;
+import com.example.application.session.SessionUtils;
 
 @Route("dashboard")
 public class MainLayout extends AppLayout {
@@ -236,13 +237,20 @@ public class MainLayout extends AppLayout {
 
     private void logout() {
         try {
-            VaadinSession currentSession = VaadinSession.getCurrent();
-            if (currentSession != null) {
-                currentSession.getSession().invalidate();
-            }
+            SessionUtils.clearSession();
+            UI.getCurrent().navigate("login");
         } catch (Exception e) {
-            System.err.println("Error during logout: " + e.getMessage());
-        } finally {
+            // Fallback logout - clear session manually and navigate
+            try {
+                VaadinSession currentSession = VaadinSession.getCurrent();
+                if (currentSession != null) {
+                    currentSession.setAttribute("idUser", null);
+                    currentSession.setAttribute("userRole", null);
+                    if (currentSession.getSession() != null) {
+                        currentSession.getSession().invalidate();
+                    }
+                }
+            } catch (Exception ignored) {}
             UI.getCurrent().navigate("login");
         }
     }

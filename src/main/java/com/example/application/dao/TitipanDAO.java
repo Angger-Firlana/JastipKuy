@@ -6,6 +6,7 @@ import com.example.application.model.Titipan;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.math.BigDecimal;
 
 public class TitipanDAO {
     private final Connection conn;
@@ -21,7 +22,11 @@ public class TitipanDAO {
         Titipan t = new Titipan();
         t.setId(rs.getInt("id"));
         t.setUser_id(rs.getInt("user_id"));
-        t.setHarga_estimasi(rs.getLong("harga_estimasi"));
+        
+        // Handle harga_estimasi as BigDecimal from database
+        BigDecimal harga = rs.getBigDecimal("harga_estimasi");
+        t.setHarga_estimasi(harga != null ? harga.longValue() : 0L);
+        
         t.setStatus(rs.getString("status"));
 
         // Fix: set nama_barang, lokasi_jemput, lokasi_antar
@@ -96,7 +101,10 @@ public class TitipanDAO {
         try {
             ps = conn.prepareStatement(query);
             rs = ps.executeQuery();
-            if (rs.next()) return rs.getLong(1);
+            if (rs.next()) {
+                BigDecimal result = rs.getBigDecimal(1);
+                return result != null ? result.longValue() : 0L;
+            }
         } catch (SQLException se) {
             System.out.println("getPendapatanThisMonth Error: " + se);
         }
@@ -105,28 +113,33 @@ public class TitipanDAO {
 
     public int insertTitipanReturnId(Titipan t) {
         int id = -1;
-        String sql = "INSERT INTO titipan (user_id, status, harga_estimasi, created_at, diambil_oleh, lokasi_jemput, lokasi_antar) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO titipan (user_id, nama_barang, status, harga_estimasi, created_at, diambil_oleh, lokasi_jemput, lokasi_antar) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             stmt.setInt(1, t.getUser_id());
-            stmt.setString(2, t.getStatus());
-            stmt.setLong(3, t.getHarga_estimasi());
-            stmt.setTimestamp(4, new Timestamp(t.getCreated_at().getTime()));
+            stmt.setString(2, t.getNama_barang());
+            stmt.setString(3, t.getStatus());
+            stmt.setBigDecimal(4, new java.math.BigDecimal(t.getHarga_estimasi()));
+            stmt.setTimestamp(5, new Timestamp(t.getCreated_at().getTime()));
 
             // HANDLE NULL untuk diambil_oleh
             if (t.getDiambil_oleh() == null || t.getDiambil_oleh() == 0) {
-                stmt.setNull(5, Types.INTEGER);
+                stmt.setNull(6, Types.INTEGER);
             } else {
-                stmt.setInt(5, t.getDiambil_oleh());
+                stmt.setInt(6, t.getDiambil_oleh());
             }
             // Set lokasi_jemput dan lokasi_antar
-            stmt.setString(6, t.getLokasi_jemput());
-            stmt.setString(7, t.getLokasi_antar());
+            stmt.setString(7, t.getLokasi_jemput());
+            stmt.setString(8, t.getLokasi_antar());
 
             stmt.executeUpdate();
             ResultSet rs = stmt.getGeneratedKeys();
             if (rs.next()) id = rs.getInt(1);
         } catch (SQLException e) {
+            System.err.println("Error inserting titipan: " + e.getMessage());
+            e.printStackTrace();
+        } catch (Exception e) {
+            System.err.println("Unexpected error inserting titipan: " + e.getMessage());
             e.printStackTrace();
         }
         return id;
@@ -152,8 +165,8 @@ public class TitipanDAO {
 
         if (data.getHarga_estimasi() != null && data.getHarga_estimasi() != 0) {
             query.append("harga_estimasi=?, ");
-            values.add(data.getHarga_estimasi());
-            types.add(Types.BIGINT);
+            values.add(new BigDecimal(data.getHarga_estimasi()));
+            types.add(Types.DECIMAL);
         }
 
         if (data.getCreated_at() != null) {

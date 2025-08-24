@@ -18,15 +18,21 @@ public class TitipanDetailDAO {
         conn = Conn.getConnection();
     }
 
-    public void insertDetail(TitipanDetail detail) {
+    public boolean insertDetail(TitipanDetail detail) {
         String sql = "INSERT INTO titipan_detail (idTransaksi, deskripsi, catatan_opsional) VALUES (?, ?, ?)";
         try (PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, detail.getIdTransaksi());
             stmt.setString(2, detail.getDeskripsi());
             stmt.setString(3, detail.getCatatan_opsional());
-            stmt.executeUpdate();
+            return stmt.executeUpdate() > 0;
         } catch (SQLException e) {
+            System.err.println("Error inserting titipan detail: " + e.getMessage());
             e.printStackTrace();
+            return false;
+        } catch (Exception e) {
+            System.err.println("Unexpected error inserting titipan detail: " + e.getMessage());
+            e.printStackTrace();
+            return false;
         }
     }
 
@@ -54,7 +60,7 @@ public class TitipanDetailDAO {
     }
 
     public boolean deleteByTitipanId(int titipanId) {
-        String query = "DELETE FROM titipan_detail WHERE id_transaksi = ?";
+        String query = "DELETE FROM titipan_detail WHERE idTransaksi = ?";
         try {
             ps = conn.prepareStatement(query);
             ps.setInt(1, titipanId);

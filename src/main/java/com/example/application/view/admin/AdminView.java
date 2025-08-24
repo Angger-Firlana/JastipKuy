@@ -844,9 +844,13 @@ public class AdminView extends VerticalLayout {
         try {
             SessionUtils.clearSession();
             UI.getCurrent().navigate("login");
-
         } catch (Exception e) {
-            showNotification("Error saat logout: " + e.getMessage(), NotificationVariant.LUMO_ERROR);
+            // Fallback logout - clear session manually and navigate
+            try {
+                VaadinSession.getCurrent().setAttribute("idUser", null);
+                VaadinSession.getCurrent().setAttribute("userRole", null);
+            } catch (Exception ignored) {}
+            UI.getCurrent().navigate("login");
         }
     }
 

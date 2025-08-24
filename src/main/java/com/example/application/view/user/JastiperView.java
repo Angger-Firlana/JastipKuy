@@ -21,6 +21,7 @@ import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.router.*;
+import com.vaadin.flow.server.VaadinSession;
 
 import java.text.NumberFormat;
 import java.time.LocalDate;
@@ -91,8 +92,17 @@ public class JastiperView extends Div{
         topRight.add(bell, logout);
 
         logout.addClickListener(ce -> {
-           SessionUtils.clearSession();
-           UI.getCurrent().navigate("login");
+           try {
+               SessionUtils.clearSession();
+               UI.getCurrent().navigate("login");
+           } catch (Exception ex) {
+               // Fallback logout - clear session manually and navigate
+               try {
+                   VaadinSession.getCurrent().setAttribute("idUser", null);
+                   VaadinSession.getCurrent().setAttribute("userRole", null);
+               } catch (Exception ignored) {}
+               UI.getCurrent().navigate("login");
+           }
         });
 
         topBar.add(brand, topRight);
