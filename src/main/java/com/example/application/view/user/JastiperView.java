@@ -399,24 +399,24 @@ public class JastiperView extends Div{
         VerticalLayout wrap = section("Laporan Penghasilan");
 
         Grid<Pendapatan> grid = new Grid<>(Pendapatan.class, false);
-        grid.addColumn(p -> p.tanggal.toString()).setHeader("Tanggal").setAutoWidth(true);
-        grid.addColumn(p -> p.orderId).setHeader("Order").setAutoWidth(true);
+        grid.addColumn(p -> p.orderId).setHeader("Order ID").setAutoWidth(true);
         grid.addColumn(p -> p.deskripsi).setHeader("Deskripsi").setAutoWidth(true).setFlexGrow(1);
         grid.addColumn(p -> "Rp " + fnum(p.pendapatan)).setHeader("Pendapatan").setAutoWidth(true);
-        grid.addColumn(p -> "Rp " + fnum(p.biaya)).setHeader("Biaya").setAutoWidth(true);
-        grid.addColumn(p -> "Rp " + fnum(p.pendapatan - p.biaya)).setHeader("Net").setAutoWidth(true);
+        
         List<Pendapatan> data = getRealPendapatan();
+        
         grid.setItems(data);
         grid.setAllRowsVisible(true);
 
-        long total = data.stream().mapToLong(p -> p.pendapatan - p.biaya).sum();
+        long totalPendapatan = getCurrentMonthEarnings();
+        int totalOrder = countSuccessfulOrdersByMonth(SessionUtils.getUserId(), Calendar.getInstance().get(Calendar.MONTH) + 1, Calendar.getInstance().get(Calendar.YEAR));
 
         Div card = new Div();
         card.getStyle().set("background", WHITE).set("border", "1px solid " + LIGHT).set("border-radius", "8px")
                 .set("padding", "16px").set("margin-top", "12px");
         card.add(new H4("Ringkasan Bulan Ini"),
-                new Paragraph("Total Net: Rp " + fnum(total)),
-                new Paragraph("Total Order: " + data.size()));
+                new Paragraph("Total Pendapatan: Rp " + fnum(totalPendapatan)),
+                new Paragraph("Total Order: " + totalOrder));
 
         wrap.add(grid, card);
         return wrap;
@@ -537,75 +537,38 @@ public class JastiperView extends Div{
     }
 
     private static String fnum(long n) {
-        String s = String.format(Locale.US, "%,d", n);
-        return s.replace(",", ".");
+        return String.format(new Locale("id","ID"), "%,d", n); // Format Indonesia dengan titik sebagai pemisah ribuan
     }
 
-
-    private List<Pendapatan> dummyPendapatan() {
-        List<Pendapatan> l = new ArrayList<>();
-        l.add(new Pendapatan(LocalDate.now().minusDays(6), "#1010", "Fee pesanan Andi", 60000, 15000));
-        l.add(new Pendapatan(LocalDate.now().minusDays(5), "#1011", "Fee pesanan Rina", 80000, 20000));
-        l.add(new Pendapatan(LocalDate.now().minusDays(4), "#1012", "Fee pesanan Andi", 45000, 12000));
-        l.add(new Pendapatan(LocalDate.now().minusDays(3), "#1013", "Fee pesanan Sinta", 70000, 18000));
-        l.add(new Pendapatan(LocalDate.now().minusDays(2), "#1014", "Fee pesanan Budi", 90000, 25000));
-        l.add(new Pendapatan(LocalDate.now().minusDays(1), "#1015", "Fee pesanan Maya", 65000, 14000));
-        return l;
-    }
 
     private List<Pendapatan> getRealPendapatan() {
         Integer jastiperId = SessionUtils.getUserId();
         List<Pendapatan> pendapatanList = new ArrayList<>();
-        
         try {
-            // Get all completed orders for this jastiper
             List<Titipan> completedOrders = titipanDAO.getOrdersByJastiper(jastiperId);
             if (completedOrders != null) {
                 for (Titipan order : completedOrders) {
                     if ("SELESAI".equalsIgnoreCase(order.getStatus())) {
-                        // Calculate income: 10% of harga_estimasi (or fixed fee if no harga_estimasi)
-                        long pendapatan = 0;
-                        if (order.getHarga_estimasi() != null && order.getHarga_estimasi() > 0) {
-                            pendapatan = (long) (order.getHarga_estimasi() * 0.1); // 10% fee
-                        } else {
-                            pendapatan = 2000; // Fixed fee of Rp 2,000
-                        }
-                        
-                        // Biaya operasional (transport, etc.)
-                        long biaya = 5000; // Fixed operational cost
-                        
-                        // Convert Date to LocalDate
+                        long pendapatan = 2000;
                         LocalDate tanggal = order.getCreated_at().toInstant()
                                 .atZone(java.time.ZoneId.systemDefault())
                                 .toLocalDate();
-                        
-                        pendapatanList.add(new Pendapatan(
+                        Pendapatan p = new Pendapatan(
                             tanggal,
                             "#" + order.getId(),
-                            "Fee pesanan " + (order.getNama_barang() != null ? order.getNama_barang() : "Barang"),
-                            pendapatan,
-                            biaya
-                        ));
+                            "Upah " + (order.getNama_barang() != null ? order.getNama_barang() : "Barang"),
+                            pendapatan
+                        );
+                        pendapatanList.add(p);
                     }
                 }
             }
         } catch (Exception e) {
             System.err.println("Error getting real pendapatan: " + e.getMessage());
         }
-        
-        // If no real data, return empty list
         return pendapatanList;
     }
-
-    private List<Ulasan> dummyUlasan() {
-        return Arrays.asList(
-                new Ulasan("#1010", "Rina", 5, "Cepat & ramah, recommended!", new java.util.Date()),
-                new Ulasan("#1012", "Andi", 4, "Barang aman, packing rapi.", new java.util.Date()),
-                new Ulasan("#1014", "Budi", 5, "Mantap sesuai request.", new java.util.Date()),
-                new Ulasan("#1015", "Maya", 3, "Sedikit telat tapi oke.", new java.util.Date())
-        );
-    }
-
+    
     // ------------------- CHART DATA -------------------
     
     private List<ChartData> getChartData() {
@@ -641,15 +604,19 @@ public class JastiperView extends Div{
             if (allOrders == null) return 0;
             
             // Filter by month, year, and status SELESAI
-            return (int) allOrders.stream()
+            int count = (int) allOrders.stream()
                     .filter(order -> {
                         Calendar orderCal = Calendar.getInstance();
                         orderCal.setTime(order.getCreated_at());
-                        return orderCal.get(Calendar.MONTH) + 1 == month && 
-                               orderCal.get(Calendar.YEAR) == year &&
-                               "SELESAI".equalsIgnoreCase(order.getStatus());
+                        boolean matchesMonth = orderCal.get(Calendar.MONTH) + 1 == month;
+                        boolean matchesYear = orderCal.get(Calendar.YEAR) == year;
+                        boolean matchesStatus = "SELESAI".equalsIgnoreCase(order.getStatus());
+                        
+                        return matchesMonth && matchesYear && matchesStatus;
                     })
                     .count();
+            
+            return count;
         } catch (Exception e) {
             System.err.println("Error counting successful orders by month: " + e.getMessage());
             return 0;
@@ -688,7 +655,18 @@ public class JastiperView extends Div{
         if (amount == null) return "-";
         return rupiah.format(amount).replace(",00", "");
     }
-    public record Pendapatan(LocalDate tanggal, String orderId, String deskripsi, long pendapatan, long biaya) {}
+    public record Pendapatan(LocalDate tanggal, String orderId, String deskripsi, long pendapatan) {}
     public record Ulasan(String orderId, String nama, int rating, String komentar, java.util.Date tanggal) {}
     public record ChartData(String month, int count) {}
+
+    private long getCurrentMonthEarnings() {
+        Integer userId = SessionUtils.getUserId();
+        Calendar cal = Calendar.getInstance();
+        int month = cal.get(Calendar.MONTH) + 1; // Calendar.MONTH is zero-based
+        int year = cal.get(Calendar.YEAR);
+        int successfulOrders = countSuccessfulOrdersByMonth(userId, month, year);
+        long totalEarnings = successfulOrders * 2000L;
+        return totalEarnings;
+    }
 }
+
