@@ -879,7 +879,7 @@ public class UserDashboardView extends Div implements BeforeEnterObserver {
             // Hitung overall rating
             double overallRating = (ratingKetepatan + ratingPelayanan) / 2.0;
             
-            boolean ratingSuccess = ratingDAO.insertRating(t.getDiambil_oleh(), userId, ratingKetepatan, ratingPelayanan, deskripsiText);
+            boolean ratingSuccess = ratingDAO.insertRating(userId, t.getDiambil_oleh(), ratingKetepatan, ratingPelayanan, deskripsiText);
             
             if (ratingSuccess) {
                 Notification.show("Terima kasih atas rating Anda! Overall rating: " + String.format("%.1f/10", overallRating));

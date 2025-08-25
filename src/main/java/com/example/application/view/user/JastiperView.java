@@ -30,6 +30,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.IntStream;
 import java.util.Calendar;
+import java.util.stream.Collectors;
+import com.vaadin.flow.component.select.Select;
+import com.vaadin.flow.component.combobox.ComboBox;
 
 @PageTitle("JastipKuy • Dashboard")
 @Route("jastiper")
@@ -52,6 +55,10 @@ public class JastiperView extends Div{
 
     private final VerticalLayout content = new VerticalLayout();
     private final Map<String, Component> pages = new LinkedHashMap<>();
+    private String currentPesananStatusFilter = "Belum Selesai";
+    private String currentKeywordFilter = "";
+    private ComboBox<String> keywordBox;
+    private VerticalLayout pesananContent;
 
     public JastiperView() {
         setSizeFull();
@@ -154,22 +161,49 @@ public class JastiperView extends Div{
 
         H1 title = new H1("RANK OF JASTIPERs");
         title.getStyle().set("margin", "0 0 16px 0").set("font-size", "28px").set("letter-spacing", "1px").set("color", TEXT_DARK);
+        wrap.add(title);
 
-        HorizontalLayout rankRow = new HorizontalLayout(); rankRow.setWidthFull();
-        rankRow.getStyle().set("gap", "12px");
-        Div small = box("64px", "180px");
-        Div b1 = box("100%", "180px");
-        Div b2 = box("100%", "180px");
-        Div b3 = box("100%", "180px");
-        rankRow.add(small, b1, b2, b3);
-        rankRow.setFlexGrow(0, small); rankRow.setFlexGrow(1, b1, b2, b3);
+        // Tabel ranking semua jastiper
+        Grid<RankingRow> allGrid = new Grid<>(RankingRow.class, false);
+        allGrid.addColumn(r -> r.rank).setHeader("Ranking").setAutoWidth(true);
+        allGrid.addColumn(r -> r.name).setHeader("Name (Jastiper)").setAutoWidth(true).setFlexGrow(1);
+        allGrid.addColumn(r -> String.format("%.1f", r.avgKetepatan)).setHeader("Overall Ketepatan").setAutoWidth(true);
+        allGrid.addColumn(r -> String.format("%.1f", r.avgPelayanan)).setHeader("Overall Pelayanan").setAutoWidth(true);
+        allGrid.addColumn(r -> String.format("%.1f", r.overall)).setHeader("Overall").setAutoWidth(true);
+        allGrid.setAllRowsVisible(true);
+        allGrid.getStyle().set("background", WHITE).set("border-radius", "8px").set("box-shadow", "0 2px 6px rgba(0,0,0,0.1)");
 
-        Paragraph rkLabel = new Paragraph("RANK KAMU");
-        rkLabel.getStyle().set("margin", "18px 0 8px 4px").set("font-weight", "700");
-        HorizontalLayout rkRow = new HorizontalLayout(); rkRow.setWidthFull(); rkRow.getStyle().set("gap", "12px");
-        rkRow.add(box("64px", "56px"), box("100%", "56px"), box("100%", "56px"), box("100%", "56px"));
-        rkRow.setFlexGrow(0, rkRow.getComponentAt(0)); rkRow.setFlexGrow(1, rkRow.getComponentAt(1), rkRow.getComponentAt(2), rkRow.getComponentAt(3));
+        List<RankingRow> rankings = computeJastiperRankings();
+        // Exclude ADMINs from the ranking table
+        rankings.removeIf(r -> {
+            try {
+                String role = userDAO.getUserRoleById(r.jastiperId);
+                return role != null && role.equalsIgnoreCase("ADMIN");
+            } catch (Exception e) { return false; }
+        });
+        allGrid.setItems(rankings);
 
+        // Tabel ranking kamu sendiri
+        H3 yourTitle = new H3("RANKING KAMU");
+        yourTitle.getStyle().set("margin", "16px 0 8px 0").set("color", TEXT_DARK);
+        Grid<RankingRow> youGrid = new Grid<>(RankingRow.class, false);
+        youGrid.addColumn(r -> r.rank).setHeader("Ranking").setAutoWidth(true);
+        youGrid.addColumn(r -> r.name).setHeader("Name (Jastiper)").setAutoWidth(true).setFlexGrow(1);
+        youGrid.addColumn(r -> String.format("%.1f", r.avgKetepatan)).setHeader("Overall Ketepatan").setAutoWidth(true);
+        youGrid.addColumn(r -> String.format("%.1f", r.avgPelayanan)).setHeader("Overall Pelayanan").setAutoWidth(true);
+        youGrid.addColumn(r -> String.format("%.1f", r.overall)).setHeader("Overall").setAutoWidth(true);
+        youGrid.setAllRowsVisible(true);
+        youGrid.getStyle().set("background", WHITE).set("border-radius", "8px").set("box-shadow", "0 2px 6px rgba(0,0,0,0.1)");
+
+        Integer me = SessionUtils.getUserId();
+        RankingRow mine = rankings.stream().filter(r -> Objects.equals(r.jastiperId, me)).findFirst().orElse(null);
+        if (mine != null) {
+            youGrid.setItems(Collections.singletonList(mine));
+        } else {
+            youGrid.setItems(Collections.emptyList());
+        }
+
+        // Keep existing buttons/sections under ranking
         HorizontalLayout bottom = new HorizontalLayout(); bottom.setWidthFull(); bottom.getStyle().set("gap", "24px").set("margin-top", "10px");
 
         VerticalLayout btns = new VerticalLayout(); btns.setWidthFull(); btns.setSpacing(true); btns.setPadding(false); btns.setMaxWidth("520px");
@@ -180,80 +214,9 @@ public class JastiperView extends Div{
                 navBtn("Riwayat dan Ulasan", VaadinIcon.COMMENTS.create(), "Riwayat dan Ulasan")
         );
 
-        VerticalLayout chartWrap = new VerticalLayout(); chartWrap.setPadding(false); chartWrap.setSpacing(false); chartWrap.setSizeFull();
-        Paragraph chartTitle = new Paragraph("GRAFIK PESANAN SUKSES"); chartTitle.getStyle().set("margin", "4px 0 8px 0").set("font-weight", "700");
+        bottom.add(btns);
 
-        Div chartCard = new Div();
-        chartCard.getStyle().set("background", WHITE).set("border", "1px solid " + LIGHT).set("border-radius", "8px")
-                .set("height", "340px").set("display", "flex");
-
-        // Left accent bar
-        Div accent = new Div(); accent.getStyle().set("width", "48px").set("background", SLATE).set("border-radius", "8px 0 0 8px");
-        // Chart content
-        VerticalLayout chartContent = new VerticalLayout();
-        chartContent.setPadding(true);
-        chartContent.setSpacing(false);
-        chartContent.setWidthFull();
-        chartContent.getStyle().set("background", WHITE).set("border-radius", "0 8px 8px 0");
-
-        // Chart title
-        H4 chartSubTitle = new H4("Pesanan Sukses per Bulan");
-        chartSubTitle.getStyle().set("margin", "0 0 16px 0").set("color", TEXT_DARK);
-
-        // Bars container
-        HorizontalLayout barsContainer = new HorizontalLayout();
-        barsContainer.setWidthFull();
-        barsContainer.setAlignItems(FlexComponent.Alignment.END);
-        barsContainer.setSpacing(true);
-        barsContainer.getStyle().set("margin-top", "auto");
-
-        // Get real data for chart
-        List<ChartData> chartData = getChartData();
-        
-        // Create bars based on real data
-        for (ChartData data : chartData) {
-            VerticalLayout barGroup = new VerticalLayout();
-            barGroup.setAlignItems(FlexComponent.Alignment.CENTER);
-            barGroup.setSpacing(false);
-            barGroup.setPadding(false);
-
-            // Bar
-            Div bar = new Div();
-            int barHeight = Math.max(20, (int) (data.count * 20)); // Scale factor
-            bar.getStyle()
-                    .set("width", "24px")
-                    .set("height", barHeight + "px")
-                    .set("background", NAVY)
-                    .set("border-radius", "6px 6px 0 0")
-                    .set("margin-bottom", "8px");
-
-            // Label
-            Span label = new Span(data.month);
-            label.getStyle()
-                    .set("font-size", "12px")
-                    .set("color", TEXT_DARK)
-                    .set("font-weight", "500");
-
-            // Count
-            Span count = new Span(String.valueOf(data.count));
-            count.getStyle()
-                    .set("font-size", "10px")
-                    .set("color", SLATE)
-                    .set("font-weight", "600");
-
-            barGroup.add(bar, label, count);
-            barsContainer.add(barGroup);
-        }
-
-        chartContent.add(chartSubTitle, barsContainer);
-        chartContent.setFlexGrow(1, barsContainer);
-
-        chartCard.add(accent, chartContent);
-        chartWrap.add(chartTitle, chartCard);
-
-        bottom.add(btns, chartWrap); bottom.setFlexGrow(0, btns); bottom.setFlexGrow(1, chartWrap);
-
-        wrap.add(title, rankRow, rkLabel, rkRow, bottom);
+        wrap.add(allGrid, yourTitle, youGrid, bottom);
         return wrap;
     }
 
@@ -262,19 +225,91 @@ public class JastiperView extends Div{
         wrap.setPadding(true);
         wrap.setSpacing(true);
         wrap.setWidthFull();
+        // Toolbar filter status
+        HorizontalLayout tools = new HorizontalLayout();
+        tools.setWidthFull();
+        tools.setPadding(false);
+        tools.setSpacing(true);
+        tools.setAlignItems(FlexComponent.Alignment.END);
 
-        refreshPesanan(wrap);
+        // Keyword autocomplete (nama barang / lokasi / #id)
+        keywordBox = new ComboBox<>();
+        keywordBox.setLabel("Cari");
+        keywordBox.setPlaceholder("Nama barang / lokasi / #id");
+        keywordBox.setAllowCustomValue(true);
+        keywordBox.setClearButtonVisible(true);
+        keywordBox.addValueChangeListener(e -> {
+            currentKeywordFilter = e.getValue() != null ? e.getValue() : "";
+            if (pesananContent != null) refreshPesanan(pesananContent);
+        });
+        keywordBox.addCustomValueSetListener(e -> {
+            keywordBox.setValue(e.getDetail());
+        });
+
+        Select<String> statusFilter = new Select<>();
+        statusFilter.setLabel("Filter Status");
+        statusFilter.setItems("Belum Selesai", "Menunggu", "Diproses", "Selesai", "Batal", "Semua");
+        statusFilter.setValue(currentPesananStatusFilter);
+        statusFilter.addValueChangeListener(e -> {
+            currentPesananStatusFilter = e.getValue();
+            if (pesananContent != null) refreshPesanan(pesananContent);
+        });
+        tools.add(keywordBox, statusFilter);
+        // Content container for cards
+        pesananContent = new VerticalLayout();
+        pesananContent.setPadding(false);
+        pesananContent.setSpacing(true);
+        wrap.add(tools, pesananContent);
+
+        refreshPesanan(pesananContent);
 
         return wrap;
     }
 
-    private void refreshPesanan(VerticalLayout wrap) {
-        wrap.removeAll(); // hapus isi lama
+    private void refreshPesanan(VerticalLayout container) {
+        container.removeAll(); // hapus isi lama
 
-        // Ambil data titipan
+        // Ambil data titipan dan terapkan filter + sorting
         List<Titipan> list = titipanDAO.getAllTitipan("");
+        if (list == null) list = new ArrayList<>();
 
-        for (Titipan t : list) {
+        // Update suggestion items for keywordBox
+        try {
+            if (keywordBox != null) {
+                LinkedHashSet<String> suggestions = new LinkedHashSet<>();
+                for (Titipan t : list) {
+                    if (t.getNama_barang() != null && !t.getNama_barang().isBlank()) suggestions.add(t.getNama_barang());
+                    if (t.getLokasi_jemput() != null && !t.getLokasi_jemput().isBlank()) suggestions.add(t.getLokasi_jemput());
+                    if (t.getLokasi_antar() != null && !t.getLokasi_antar().isBlank()) suggestions.add(t.getLokasi_antar());
+                    if (t.getId() != null) suggestions.add("#" + t.getId());
+                }
+                keywordBox.setItems(suggestions);
+            }
+        } catch (Exception ignore) {}
+
+        String kw = currentKeywordFilter == null ? "" : currentKeywordFilter.trim().toLowerCase();
+        List<Titipan> filtered = list.stream()
+                .filter(t -> {
+                    // Status filter
+                    if ("Semua".equalsIgnoreCase(currentPesananStatusFilter)) return true;
+                    if ("Belum Selesai".equalsIgnoreCase(currentPesananStatusFilter)) {
+                        return "MENUNGGU".equalsIgnoreCase(t.getStatus()) || "DIPROSES".equalsIgnoreCase(t.getStatus());
+                    }
+                    return currentPesananStatusFilter.equalsIgnoreCase(t.getStatus());
+                })
+                .filter(t -> {
+                    // Keyword filter
+                    if (kw.isEmpty()) return true;
+                    boolean byName = t.getNama_barang() != null && t.getNama_barang().toLowerCase().contains(kw);
+                    boolean byJemput = t.getLokasi_jemput() != null && t.getLokasi_jemput().toLowerCase().contains(kw);
+                    boolean byAntar = t.getLokasi_antar() != null && t.getLokasi_antar().toLowerCase().contains(kw);
+                    boolean byId = t.getId() != null && ("#" + t.getId()).toLowerCase().contains(kw);
+                    return byName || byJemput || byAntar || byId;
+                })
+                .sorted(Comparator.comparing(Titipan::getCreated_at, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
+                .collect(Collectors.toList());
+
+        for (Titipan t : filtered) {
             VerticalLayout card = new VerticalLayout();
             card.addClassName("pesanan-card");
             card.setSpacing(false);
@@ -313,21 +348,10 @@ public class JastiperView extends Div{
                     titipan.setDiambil_oleh(SessionUtils.getUserId());
                     titipanDAO.updateTitipan(titipan);
                     Notification.show("Pesanan #" + t.getId() + " diterima");
-                    refreshPesanan(wrap);
+                    refreshPesanan(container);
                 });
 
-                Button batal = new Button("Batal");
-                batal.getStyle().set("background", "red").set("color", "white");
-                batal.addClickListener(e -> {
-                    Titipan titipan = new Titipan();
-                    titipan.setId(t.getId());
-                    titipan.setStatus("BATAL");
-                    titipanDAO.updateTitipan(titipan);
-                    Notification.show("Pesanan #" + t.getId() + " dibatalkan");
-                    refreshPesanan(wrap);
-                });
-
-                actions.add(terima, batal);
+                actions.add(terima);
             }
             else if ("DIPROSES".equals(t.getStatus())) {
                 statusBadge.getStyle().set("background", "#2196F3").set("color", "white");
@@ -340,21 +364,9 @@ public class JastiperView extends Div{
                     titipan.setStatus("SELESAI");
                     titipanDAO.updateTitipan(titipan);
                     Notification.show("Pesanan #" + t.getId() + " selesai");
-                    refreshPesanan(wrap);
+                    refreshPesanan(container);
                 });
-
-                Button batal = new Button("Batal");
-                batal.getStyle().set("background", "red").set("color", "white");
-                batal.addClickListener(e -> {
-                    Titipan titipan = new Titipan();
-                    titipan.setId(t.getId());
-                    titipan.setStatus("BATAL");
-                    titipanDAO.updateTitipan(titipan);
-                    Notification.show("Pesanan #" + t.getId() + " dibatalkan");
-                    refreshPesanan(wrap);
-                });
-
-                actions.add(selesai, batal);
+                actions.add(selesai);
             }
             else if ("SELESAI".equals(t.getStatus())) {
                 statusBadge.getStyle().set("background", "gray").set("color", "white");
@@ -364,7 +376,7 @@ public class JastiperView extends Div{
             }
 
             card.add(namaBarang, lokasi, harga, statusBadge, actions);
-            wrap.add(card);
+            container.add(card);
         }
     }
 
@@ -428,7 +440,37 @@ public class JastiperView extends Div{
         // Get real review data for this jastiper
         List<Ulasan> realReviews = getRealReviews();
         
-        // Calculate overall ratings
+        // Reviews Grid - TABLE DI ATAS
+        if (realReviews.isEmpty()) {
+            Div noReviews = new Div();
+            noReviews.setText("Belum ada ulasan untuk Anda");
+            noReviews.getStyle()
+                    .set("text-align", "center")
+                    .set("padding", "40px")
+                    .set("color", SLATE)
+                    .set("font-style", "italic");
+            wrap.add(noReviews);
+        } else {
+            H3 reviewsTitle = new H3("Detail Ulasan per Order");
+            reviewsTitle.getStyle().set("margin", "0 0 16px 0").set("color", TEXT_DARK);
+            wrap.add(reviewsTitle);
+            
+            Grid<Ulasan> grid = new Grid<>(Ulasan.class, false);
+            grid.addColumn(u -> u.orderId).setHeader("Order").setAutoWidth(true);
+            grid.addColumn(u -> u.nama).setHeader("Pengulas").setAutoWidth(true);
+            grid.addColumn(u -> String.valueOf(u.ratingKetepatan) + "/10").setHeader("Rating Ketepatan").setAutoWidth(true);
+            grid.addColumn(u -> String.valueOf(u.ratingPelayanan) + "/10").setHeader("Rating Pelayanan").setAutoWidth(true);
+            grid.addColumn(u -> String.format("%.1f/10", (u.ratingKetepatan + u.ratingPelayanan) / 2.0)).setHeader("Rating per Order").setAutoWidth(true);
+            grid.addColumn(u -> u.komentar).setHeader("Komentar").setFlexGrow(1);
+            grid.addColumn(u -> u.tanggal.toString()).setHeader("Tanggal").setAutoWidth(true);
+            grid.setItems(realReviews);
+            grid.setAllRowsVisible(true);
+            grid.getStyle().set("background", WHITE).set("border-radius", "8px").set("box-shadow", "0 2px 6px rgba(0,0,0,0.1)");
+
+            wrap.add(grid);
+        }
+        
+        // Calculate overall ratings - OVERALL RATING DI BAWAH
         double overallKetepatan = 0.0;
         double overallPelayanan = 0.0;
         double overallRating = 0.0;
@@ -454,10 +496,10 @@ public class JastiperView extends Div{
                 .set("color", WHITE)
                 .set("border-radius", "16px")
                 .set("padding", "24px")
-                .set("margin-bottom", "24px")
+                .set("margin-top", "24px")
                 .set("box-shadow", "0 10px 30px rgba(0,0,0,0.15)");
         
-        H3 summaryTitle = new H3("📊 RATING OVERALL");
+        H3 summaryTitle = new H3("RATING OVERALL");
         summaryTitle.getStyle().set("margin", "0 0 16px 0").set("color", WHITE).set("text-align", "center");
         
         HorizontalLayout ratingStats = new HorizontalLayout();
@@ -520,36 +562,6 @@ public class JastiperView extends Div{
         summaryCard.add(summaryTitle, ratingStats);
         
         wrap.add(summaryCard);
-        
-        // Reviews Grid
-        if (realReviews.isEmpty()) {
-            Div noReviews = new Div();
-            noReviews.setText("Belum ada ulasan untuk Anda");
-            noReviews.getStyle()
-                    .set("text-align", "center")
-                    .set("padding", "40px")
-                    .set("color", SLATE)
-                    .set("font-style", "italic");
-            wrap.add(noReviews);
-        } else {
-            H3 reviewsTitle = new H3("📝 Detail Ulasan per Order");
-            reviewsTitle.getStyle().set("margin", "24px 0 16px 0").set("color", TEXT_DARK);
-            wrap.add(reviewsTitle);
-            
-            Grid<Ulasan> grid = new Grid<>(Ulasan.class, false);
-            grid.addColumn(u -> u.orderId).setHeader("Order").setAutoWidth(true);
-            grid.addColumn(u -> u.nama).setHeader("Pengulas").setAutoWidth(true);
-            grid.addColumn(u -> String.valueOf(u.ratingKetepatan) + "/10").setHeader("Rating Ketepatan").setAutoWidth(true);
-            grid.addColumn(u -> String.valueOf(u.ratingPelayanan) + "/10").setHeader("Rating Pelayanan").setAutoWidth(true);
-            grid.addColumn(u -> String.format("%.1f/10", (u.ratingKetepatan + u.ratingPelayanan) / 2.0)).setHeader("Rating per Order").setAutoWidth(true);
-            grid.addColumn(u -> u.komentar).setHeader("Komentar").setFlexGrow(1);
-            grid.addColumn(u -> u.tanggal.toString()).setHeader("Tanggal").setAutoWidth(true);
-            grid.setItems(realReviews);
-            grid.setAllRowsVisible(true);
-            grid.getStyle().set("background", WHITE).set("border-radius", "8px").set("box-shadow", "0 2px 6px rgba(0,0,0,0.1)");
-
-            wrap.add(grid);
-        }
         
         return wrap;
     }
@@ -642,6 +654,58 @@ public class JastiperView extends Div{
     }
 
 
+    // ------------------- RANKING HELPER -------------------
+    private List<RankingRow> computeJastiperRankings() {
+        // Ambil seluruh rating, group by idDriver (jastiper), hitung rata2
+        List<RatingDAO.RatingData> all = ratingDAO.getAllRatings();
+        Map<Integer, List<RatingDAO.RatingData>> byJastiper = new HashMap<>();
+        for (RatingDAO.RatingData r : all) {
+            if (r.jastiperId == null) continue;
+            byJastiper.computeIfAbsent(r.jastiperId, k -> new ArrayList<>()).add(r);
+        }
+
+        List<RankingRow> rows = new ArrayList<>();
+        for (Map.Entry<Integer, List<RatingDAO.RatingData>> e : byJastiper.entrySet()) {
+            Integer jastiperId = e.getKey();
+            // Hanya masukkan user dengan role Jastiper
+            String role = userDAO.getUserRoleById(jastiperId);
+            if (role == null || !role.equalsIgnoreCase("Jastiper")) continue;
+
+            List<RatingDAO.RatingData> ratings = e.getValue();
+            if (ratings.isEmpty()) continue;
+            double avgKet = ratings.stream().mapToInt(r -> r.ratingKetepatan).average().orElse(0);
+            double avgPel = ratings.stream().mapToInt(r -> r.ratingPelayanan).average().orElse(0);
+            double overall = (avgKet + avgPel) / 2.0;
+            String name = userDAO.getUserNameById(jastiperId);
+            rows.add(new RankingRow(0, jastiperId, name != null ? name : ("Jastiper #" + jastiperId), avgKet, avgPel, overall));
+        }
+
+        // Sort overall desc
+        rows.sort(Comparator.comparingDouble((RankingRow r) -> r.overall).reversed());
+        // Assign rank 1..n
+        int i = 1;
+        for (RankingRow r : rows) r.rank = i++;
+        return rows;
+    }
+
+    public static class RankingRow {
+        public int rank;
+        public final Integer jastiperId;
+        public final String name;
+        public final double avgKetepatan;
+        public final double avgPelayanan;
+        public final double overall;
+
+        public RankingRow(int rank, Integer jastiperId, String name, double avgKetepatan, double avgPelayanan, double overall) {
+            this.rank = rank;
+            this.jastiperId = jastiperId;
+            this.name = name;
+            this.avgKetepatan = avgKetepatan;
+            this.avgPelayanan = avgPelayanan;
+            this.overall = overall;
+        }
+    }
+
     private List<Pendapatan> getRealPendapatan() {
         Integer jastiperId = SessionUtils.getUserId();
         List<Pendapatan> pendapatanList = new ArrayList<>();
@@ -728,29 +792,52 @@ public class JastiperView extends Div{
         Integer jastiperId = SessionUtils.getUserId();
         List<Ulasan> reviews = new ArrayList<>();
         
+        System.out.println("DEBUG: getRealReviews called for jastiper ID: " + jastiperId);
+        
+        // DEBUG: Get all ratings from database first
+        System.out.println("DEBUG: Getting ALL ratings from database...");
+        List<RatingDAO.RatingData> allRatings = ratingDAO.getAllRatings();
+        System.out.println("DEBUG: Total ratings in database: " + (allRatings != null ? allRatings.size() : "null"));
+        
         try {
             // Get all ratings for this jastiper
             List<RatingDAO.RatingData> ratings = ratingDAO.getRatingsByJastiper(jastiperId);
+            System.out.println("DEBUG: getRatingsByJastiper returned " + (ratings != null ? ratings.size() : "null") + " ratings");
+            
             if (ratings != null) {
                 for (RatingDAO.RatingData rating : ratings) {
-                    String userName = "User"; // Default user name since we don't store who gave the rating
+                    // Get the actual user name who gave the rating
+                    String userName = userDAO.getUserNameById(rating.userId);
+                    if (userName == null || userName.trim().isEmpty()) {
+                        userName = "User #" + rating.userId;
+                    }
+                    
                     String comment = rating.deskripsi != null && !rating.deskripsi.trim().isEmpty() ? 
                         rating.deskripsi : "Tidak ada komentar";
                     
-                    reviews.add(new Ulasan(
+                    Ulasan ulasan = new Ulasan(
                         "#" + rating.ratingId, 
                         userName, 
                         rating.ratingKetepatan, 
                         rating.ratingPelayanan, 
                         comment, 
                         rating.date
-                    ));
+                    );
+                    reviews.add(ulasan);
+                    
+                    System.out.println("DEBUG: Created Ulasan: " + ulasan.orderId + 
+                                     ", User: " + userName + 
+                                     ", Ketepatan: " + ulasan.ratingKetepatan + 
+                                     ", Pelayanan: " + ulasan.ratingPelayanan + 
+                                     ", Komentar: " + ulasan.komentar);
                 }
             }
         } catch (Exception e) {
             System.err.println("Error getting real reviews: " + e.getMessage());
+            e.printStackTrace();
         }
         
+        System.out.println("DEBUG: Returning " + reviews.size() + " reviews");
         return reviews;
     }
     

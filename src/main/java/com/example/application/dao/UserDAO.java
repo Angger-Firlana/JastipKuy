@@ -34,6 +34,22 @@ public class UserDAO {
         return name;
     }
 
+    public String getUserRoleById(int id) {
+        String role = null;
+        String query = "SELECT role FROM users WHERE id = ?";
+        try {
+            ps = conn.prepareStatement(query);
+            ps.setInt(1, id);
+            rs = ps.executeQuery();
+            if (rs.next()) {
+                role = rs.getString("role");
+            }
+        } catch (SQLException e) {
+            System.out.println("getUserRoleById Error: " + e);
+        }
+        return role;
+    }
+
 
 
 
