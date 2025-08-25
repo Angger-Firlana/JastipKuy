@@ -799,7 +799,7 @@ public class UserDashboardView extends Div implements BeforeEnterObserver {
         }
 
         Dialog dialog = new Dialog();
-        dialog.setWidth("500px");
+        dialog.setWidth("600px");
 
         H3 title = new H3("Beri Rating JASTIPER");
         title.getStyle().set("color", TEXT_DARK);
@@ -809,28 +809,47 @@ public class UserDashboardView extends Div implements BeforeEnterObserver {
         Span s1 = new Span("Nama JASTIPER: " + driverName);
         s1.getStyle().set("font-weight", "500");
 
-        // Rating 1-10 scale
-        VerticalLayout ratingContainer = new VerticalLayout();
-        ratingContainer.setPadding(false);
-        ratingContainer.setSpacing(false);
+        // Rating Ketepatan Waktu (1-10)
+        VerticalLayout ratingKetepatanContainer = new VerticalLayout();
+        ratingKetepatanContainer.setPadding(false);
+        ratingKetepatanContainer.setSpacing(false);
         
-        Span ratingLabel = new Span("Rating (1-10):");
-        ratingLabel.getStyle().set("font-weight", "600").set("margin-bottom", "8px");
+        Span ratingKetepatanLabel = new Span("Rating Ketepatan Waktu (1-10):");
+        ratingKetepatanLabel.getStyle().set("font-weight", "600").set("margin-bottom", "8px");
         
-        NumberField ratingField = new NumberField();
-        ratingField.setMin(1);
-        ratingField.setMax(10);
-        ratingField.setValue(10.0); // Default to 10
-        ratingField.setWidth("100px");
-        ratingField.setPlaceholder("1-10");
-        styleTextField(ratingField);
+        NumberField ratingKetepatanField = new NumberField();
+        ratingKetepatanField.setMin(1);
+        ratingKetepatanField.setMax(10);
+        ratingKetepatanField.setValue(10.0); // Default to 10
+        ratingKetepatanField.setWidth("100px");
+        ratingKetepatanField.setPlaceholder("1-10");
+        styleTextField(ratingKetepatanField);
         
-        ratingContainer.add(ratingLabel, ratingField);
+        ratingKetepatanContainer.add(ratingKetepatanLabel, ratingKetepatanField);
 
-        TextArea saran = new TextArea("Saran/Komentar");
-        saran.setWidthFull();
-        saran.setHeight("120px");
-        styleTextField(saran);
+        // Rating Pelayanan (1-10)
+        VerticalLayout ratingPelayananContainer = new VerticalLayout();
+        ratingPelayananContainer.setPadding(false);
+        ratingPelayananContainer.setSpacing(false);
+        
+        Span ratingPelayananLabel = new Span("Rating Pelayanan (1-10):");
+        ratingPelayananLabel.getStyle().set("font-weight", "600").set("margin-bottom", "8px");
+        
+        NumberField ratingPelayananField = new NumberField();
+        ratingPelayananField.setMin(1);
+        ratingPelayananField.setMax(10);
+        ratingPelayananField.setValue(10.0); // Default to 10
+        ratingPelayananField.setWidth("100px");
+        ratingPelayananField.setPlaceholder("1-10");
+        styleTextField(ratingPelayananField);
+        
+        ratingPelayananContainer.add(ratingPelayananLabel, ratingPelayananField);
+
+        // Deskripsi/Komentar
+        TextArea deskripsi = new TextArea("Deskripsi/Komentar");
+        deskripsi.setWidthFull();
+        deskripsi.setHeight("120px");
+        styleTextField(deskripsi);
 
         HorizontalLayout buttons = new HorizontalLayout();
         buttons.setSpacing(true);
@@ -840,20 +859,30 @@ public class UserDashboardView extends Div implements BeforeEnterObserver {
         styleSecondary(cancel);
 
         Button submit = new Button("Submit", VaadinIcon.CHECK.create(), e -> {
-            Double ratingValue = ratingField.getValue();
-            if (ratingValue == null || ratingValue < 1 || ratingValue > 10) {
-                Notification.show("Rating harus antara 1-10!");
+            Double ratingKetepatanValue = ratingKetepatanField.getValue();
+            Double ratingPelayananValue = ratingPelayananField.getValue();
+            
+            if (ratingKetepatanValue == null || ratingKetepatanValue < 1 || ratingKetepatanValue > 10) {
+                Notification.show("Rating ketepatan harus antara 1-10!");
                 return;
             }
             
-            int rating = ratingValue.intValue();
-            String comment = saran.getValue();
+            if (ratingPelayananValue == null || ratingPelayananValue < 1 || ratingPelayananValue > 10) {
+                Notification.show("Rating pelayanan harus antara 1-10!");
+                return;
+            }
             
-            boolean ratingSuccess = ratingDAO.insertRating(t.getDiambil_oleh(), rating);
-            boolean commentSuccess = laporanDAO.insertLaporan(userId, t.getDiambil_oleh(), comment);
+            int ratingKetepatan = ratingKetepatanValue.intValue();
+            int ratingPelayanan = ratingPelayananValue.intValue();
+            String deskripsiText = deskripsi.getValue();
             
-            if (ratingSuccess && commentSuccess) {
-                Notification.show("Terima kasih atas rating Anda! Anda tidak dapat memberikan rating lagi untuk jastiper ini.");
+            // Hitung overall rating
+            double overallRating = (ratingKetepatan + ratingPelayanan) / 2.0;
+            
+            boolean ratingSuccess = ratingDAO.insertRating(t.getDiambil_oleh(), userId, ratingKetepatan, ratingPelayanan, deskripsiText);
+            
+            if (ratingSuccess) {
+                Notification.show("Terima kasih atas rating Anda! Overall rating: " + String.format("%.1f/10", overallRating));
                 // Refresh the grid to show updated data
                 refreshGrids();
             } else {
@@ -866,8 +895,9 @@ public class UserDashboardView extends Div implements BeforeEnterObserver {
 
         buttons.add(cancel, submit);
 
-        VerticalLayout content = new VerticalLayout(title, s1, ratingContainer, saran, buttons);
+        VerticalLayout content = new VerticalLayout(title, s1, ratingKetepatanContainer, ratingPelayananContainer, deskripsi, buttons);
         content.setPadding(false);
+        content.setSpacing(true);
         dialog.add(content);
         dialog.open();
     }
@@ -904,14 +934,8 @@ public class UserDashboardView extends Div implements BeforeEnterObserver {
     // Check if user already rated a specific jastiper for a specific order
     private boolean hasUserRatedJastiper(Integer userId, Integer jastiperId, Integer titipanId) {
         try {
-            // Check if there's a laporan (comment) from this user to this jastiper
-            // Since the current database structure doesn't store who gave the rating,
-            // we'll use the laporan table as the primary indicator
-            boolean hasComment = laporanDAO.hasUserCommentedJastiper(userId, jastiperId);
-            
-            // For now, we'll consider a comment as sufficient evidence of rating
-            // In a more complete system, you'd also check the rating table
-            return hasComment;
+            // Check if there's a rating from this user to this jastiper
+            return ratingDAO.hasUserRatedJastiper(userId, jastiperId);
         } catch (Exception e) {
             System.err.println("Error checking if user rated jastiper: " + e.getMessage());
             return false;
@@ -921,10 +945,8 @@ public class UserDashboardView extends Div implements BeforeEnterObserver {
     // More specific check - check if user rated this specific jastiper for this specific order
     private boolean hasUserRatedJastiperForOrder(Integer userId, Integer jastiperId, Integer titipanId) {
         try {
-            // Check if there's a laporan (comment) from this user to this jastiper
-            // This is the most reliable way to check with the current database structure
-            boolean hasComment = laporanDAO.hasUserCommentedJastiper(userId, jastiperId);
-            return hasComment;
+            // Check if there's a rating from this user to this jastiper
+            return ratingDAO.hasUserRatedJastiper(userId, jastiperId);
         } catch (Exception e) {
             System.err.println("Error checking if user rated jastiper for order: " + e.getMessage());
             return false;

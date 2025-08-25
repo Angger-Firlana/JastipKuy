@@ -428,6 +428,100 @@ public class JastiperView extends Div{
         // Get real review data for this jastiper
         List<Ulasan> realReviews = getRealReviews();
         
+        // Calculate overall ratings
+        double overallKetepatan = 0.0;
+        double overallPelayanan = 0.0;
+        double overallRating = 0.0;
+        
+        if (!realReviews.isEmpty()) {
+            overallKetepatan = realReviews.stream()
+                    .mapToDouble(u -> u.ratingKetepatan)
+                    .average()
+                    .orElse(0.0);
+            
+            overallPelayanan = realReviews.stream()
+                    .mapToDouble(u -> u.ratingPelayanan)
+                    .average()
+                    .orElse(0.0);
+            
+            overallRating = (overallKetepatan + overallPelayanan) / 2.0;
+        }
+        
+        // Overall Rating Summary Card
+        Div summaryCard = new Div();
+        summaryCard.getStyle()
+                .set("background", "linear-gradient(135deg, " + NAVY + ", " + SLATE + ")")
+                .set("color", WHITE)
+                .set("border-radius", "16px")
+                .set("padding", "24px")
+                .set("margin-bottom", "24px")
+                .set("box-shadow", "0 10px 30px rgba(0,0,0,0.15)");
+        
+        H3 summaryTitle = new H3("📊 RATING OVERALL");
+        summaryTitle.getStyle().set("margin", "0 0 16px 0").set("color", WHITE).set("text-align", "center");
+        
+        HorizontalLayout ratingStats = new HorizontalLayout();
+        ratingStats.setWidthFull();
+        ratingStats.setSpacing(true);
+        ratingStats.setJustifyContentMode(FlexComponent.JustifyContentMode.CENTER);
+        
+        // Ketepatan Rating
+        VerticalLayout ketepatanStat = new VerticalLayout();
+        ketepatanStat.setAlignItems(FlexComponent.Alignment.CENTER);
+        ketepatanStat.setPadding(false);
+        ketepatanStat.setSpacing(false);
+        
+        Span ketepatanLabel = new Span("Ketepatan Waktu");
+        ketepatanLabel.getStyle().set("font-size", "14px").set("color", "rgba(255,255,255,0.8)");
+        
+        H2 ketepatanValue = new H2(String.format("%.1f", overallKetepatan));
+        ketepatanValue.getStyle().set("margin", "8px 0").set("color", WHITE).set("font-size", "32px");
+        
+        Span ketepatanMax = new Span("/10");
+        ketepatanMax.getStyle().set("font-size", "16px").set("color", "rgba(255,255,255,0.6)");
+        
+        ketepatanStat.add(ketepatanLabel, ketepatanValue, ketepatanMax);
+        
+        // Pelayanan Rating
+        VerticalLayout pelayananStat = new VerticalLayout();
+        pelayananStat.setAlignItems(FlexComponent.Alignment.CENTER);
+        pelayananStat.setPadding(false);
+        pelayananStat.setSpacing(false);
+        
+        Span pelayananLabel = new Span("Pelayanan");
+        pelayananLabel.getStyle().set("font-size", "14px").set("color", "rgba(255,255,255,0.8)");
+        
+        H2 pelayananValue = new H2(String.format("%.1f", overallPelayanan));
+        pelayananValue.getStyle().set("margin", "8px 0").set("color", WHITE).set("font-size", "32px");
+        
+        Span pelayananMax = new Span("/10");
+        pelayananMax.getStyle().set("font-size", "16px").set("color", "rgba(255,255,255,0.6)");
+        
+        pelayananStat.add(pelayananLabel, pelayananValue, pelayananMax);
+        
+        // Overall Rating
+        VerticalLayout overallStat = new VerticalLayout();
+        overallStat.setAlignItems(FlexComponent.Alignment.CENTER);
+        overallStat.setPadding(false);
+        overallStat.setSpacing(false);
+        
+        Span overallLabel = new Span("Rating Overall");
+        overallLabel.getStyle().set("font-size", "14px").set("color", "rgba(255,255,255,0.8)");
+        
+        H2 overallValue = new H2(String.format("%.1f", overallRating));
+        overallValue.getStyle().set("margin", "8px 0").set("color", WHITE).set("font-size", "32px");
+        
+        Span overallMax = new Span("/10");
+        overallMax.getStyle().set("font-size", "16px").set("color", "rgba(255,255,255,0.6)");
+        
+        overallStat.add(overallLabel, overallValue, overallMax);
+        
+        ratingStats.add(ketepatanStat, pelayananStat, overallStat);
+        summaryCard.add(summaryTitle, ratingStats);
+        
+        wrap.add(summaryCard);
+        
+        // Reviews Grid
         if (realReviews.isEmpty()) {
             Div noReviews = new Div();
             noReviews.setText("Belum ada ulasan untuk Anda");
@@ -438,14 +532,21 @@ public class JastiperView extends Div{
                     .set("font-style", "italic");
             wrap.add(noReviews);
         } else {
+            H3 reviewsTitle = new H3("📝 Detail Ulasan per Order");
+            reviewsTitle.getStyle().set("margin", "24px 0 16px 0").set("color", TEXT_DARK);
+            wrap.add(reviewsTitle);
+            
             Grid<Ulasan> grid = new Grid<>(Ulasan.class, false);
             grid.addColumn(u -> u.orderId).setHeader("Order").setAutoWidth(true);
             grid.addColumn(u -> u.nama).setHeader("Pengulas").setAutoWidth(true);
-            grid.addColumn(u -> String.valueOf(u.rating) + "/10").setHeader("Rating").setAutoWidth(true);
+            grid.addColumn(u -> String.valueOf(u.ratingKetepatan) + "/10").setHeader("Rating Ketepatan").setAutoWidth(true);
+            grid.addColumn(u -> String.valueOf(u.ratingPelayanan) + "/10").setHeader("Rating Pelayanan").setAutoWidth(true);
+            grid.addColumn(u -> String.format("%.1f/10", (u.ratingKetepatan + u.ratingPelayanan) / 2.0)).setHeader("Rating per Order").setAutoWidth(true);
             grid.addColumn(u -> u.komentar).setHeader("Komentar").setFlexGrow(1);
             grid.addColumn(u -> u.tanggal.toString()).setHeader("Tanggal").setAutoWidth(true);
             grid.setItems(realReviews);
             grid.setAllRowsVisible(true);
+            grid.getStyle().set("background", WHITE).set("border-radius", "8px").set("box-shadow", "0 2px 6px rgba(0,0,0,0.1)");
 
             wrap.add(grid);
         }
@@ -632,15 +733,18 @@ public class JastiperView extends Div{
             List<RatingDAO.RatingData> ratings = ratingDAO.getRatingsByJastiper(jastiperId);
             if (ratings != null) {
                 for (RatingDAO.RatingData rating : ratings) {
-                    // Since the current database structure doesn't store who gave the rating,
-                    // we'll show a simplified review
-                    Integer titipanId = rating.titipanId;
-                    if (titipanId != null) {
-                        String userName = "User";
-                        String comment = "Rating: " + rating.rating + "/10";
-                        
-                        reviews.add(new Ulasan("#" + titipanId, userName, rating.rating, comment, rating.date));
-                    }
+                    String userName = "User"; // Default user name since we don't store who gave the rating
+                    String comment = rating.deskripsi != null && !rating.deskripsi.trim().isEmpty() ? 
+                        rating.deskripsi : "Tidak ada komentar";
+                    
+                    reviews.add(new Ulasan(
+                        "#" + rating.ratingId, 
+                        userName, 
+                        rating.ratingKetepatan, 
+                        rating.ratingPelayanan, 
+                        comment, 
+                        rating.date
+                    ));
                 }
             }
         } catch (Exception e) {
@@ -656,7 +760,7 @@ public class JastiperView extends Div{
         return rupiah.format(amount).replace(",00", "");
     }
     public record Pendapatan(LocalDate tanggal, String orderId, String deskripsi, long pendapatan) {}
-    public record Ulasan(String orderId, String nama, int rating, String komentar, java.util.Date tanggal) {}
+    public record Ulasan(String orderId, String nama, int ratingKetepatan, int ratingPelayanan, String komentar, java.util.Date tanggal) {}
     public record ChartData(String month, int count) {}
 
     private long getCurrentMonthEarnings() {

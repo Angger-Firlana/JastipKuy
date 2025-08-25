@@ -12,13 +12,15 @@ public class RatingDAO {
     private final Connection conn;
     public RatingDAO() { conn = Conn.getConnection(); }
 
-    // Insert rating: driverId = jastiper yang di-rating, rate = 1-10
-    public boolean insertRating(Integer driverId, int rate) {
-        if (driverId == null || driverId == 0) return false;
-        String sql = "INSERT INTO ratiing_user (idUser, rate) VALUES (?, ?)";
+    // Insert rating dengan struktur baru: rating ketepatan, rating pelayanan, dan deskripsi
+    public boolean insertRating(Integer jastiperId, Integer userId, int ratingKetepatan, int ratingPelayanan, String deskripsi) {
+        if (jastiperId == null || jastiperId == 0 || userId == null || userId == 0) return false;
+        String sql = "INSERT INTO ratiing_user (idUser, rating_ketepatan, rating_pelayanan, deskripsi) VALUES (?, ?, ?, ?)";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, driverId);
-            ps.setInt(2, rate); // DECIMAL(10,0) aman di-setInt
+            ps.setInt(1, jastiperId);
+            ps.setInt(2, ratingKetepatan);
+            ps.setInt(3, ratingPelayanan);
+            ps.setString(4, deskripsi);
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
             System.out.println("insertRating Error: " + e.getMessage());
@@ -29,18 +31,17 @@ public class RatingDAO {
     /** Get all ratings for a specific jastiper */
     public List<RatingData> getRatingsByJastiper(Integer jastiperId) {
         List<RatingData> ratings = new ArrayList<>();
-        String sql = "SELECT idUser, rate FROM ratiing_user WHERE idUser = ? ORDER BY id DESC";
+        String sql = "SELECT id, rating_ketepatan, rating_pelayanan, deskripsi FROM ratiing_user WHERE idUser = ? ORDER BY id DESC";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, jastiperId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    // Get titipan ID from titipan table where diambil_oleh = jastiperId
-                    Integer titipanId = getTitipanIdByJastiper(jastiperId);
-                    
                     RatingData rating = new RatingData(
-                        jastiperId, // This is the jastiper being rated
-                        titipanId,
-                        rs.getInt("rate"),
+                        jastiperId,
+                        rs.getInt("id"),
+                        rs.getInt("rating_ketepatan"),
+                        rs.getInt("rating_pelayanan"),
+                        rs.getString("deskripsi"),
                         new java.util.Date() // Since ratiing_user doesn't have created_at, use current date
                     );
                     ratings.add(rating);
@@ -52,30 +53,14 @@ public class RatingDAO {
         return ratings;
     }
     
-    private Integer getTitipanIdByJastiper(Integer jastiperId) {
-        String sql = "SELECT id FROM titipan WHERE diambil_oleh = ? AND status = 'SELESAI' ORDER BY created_at DESC LIMIT 1";
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, jastiperId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt("id");
-                }
-            }
-        } catch (SQLException e) {
-            System.out.println("getTitipanIdByJastiper Error: " + e.getMessage());
-        }
-        return null;
-    }
-    
     /** Check if a specific user has rated a specific jastiper */
     public boolean hasUserRatedJastiper(Integer userId, Integer jastiperId) {
         // Since ratiing_user table doesn't store who gave the rating,
-        // we'll check if there's a laporan (comment) from this user to this jastiper
+        // we'll check if there's a rating for this jastiper
         // This is a workaround for the current database structure
-        String sql = "SELECT COUNT(*) FROM laporan WHERE id_penitip = ? AND id_pengambil = ?";
+        String sql = "SELECT COUNT(*) FROM ratiing_user WHERE idUser = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, userId);
-            ps.setInt(2, jastiperId);
+            ps.setInt(1, jastiperId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     return rs.getInt(1) > 0;
@@ -87,18 +72,27 @@ public class RatingDAO {
         return false;
     }
     
-    // Data class untuk rating
+    // Data class untuk rating dengan struktur baru
     public static class RatingData {
         public final Integer jastiperId; // The jastiper being rated
-        public final Integer titipanId;
-        public final Integer rating;
+        public final Integer ratingId;
+        public final Integer ratingKetepatan;
+        public final Integer ratingPelayanan;
+        public final String deskripsi;
         public final java.util.Date date;
         
-        public RatingData(Integer jastiperId, Integer titipanId, Integer rating, java.util.Date date) {
+        public RatingData(Integer jastiperId, Integer ratingId, Integer ratingKetepatan, Integer ratingPelayanan, String deskripsi, java.util.Date date) {
             this.jastiperId = jastiperId;
-            this.titipanId = titipanId;
-            this.rating = rating;
+            this.ratingId = ratingId;
+            this.ratingKetepatan = ratingKetepatan;
+            this.ratingPelayanan = ratingPelayanan;
+            this.deskripsi = deskripsi;
             this.date = date;
+        }
+        
+        // Hitung overall rating (rata-rata dari ketepatan dan pelayanan)
+        public double getOverallRating() {
+            return (ratingKetepatan + ratingPelayanan) / 2.0;
         }
     }
 }
