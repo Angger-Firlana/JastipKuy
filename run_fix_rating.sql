@@ -1,27 +1,16 @@
--- Jalankan script ini di MariaDB untuk memperbaiki data rating
--- Masalah: field idUser menyimpan user yang memberikan rating, bukan jastiper yang di-rating
+-- Helper SQL (tanpa mengubah struktur tabel) untuk mengecek dan mengelola data rating
 
 USE jastip;
 
 -- Lihat data yang ada sekarang
-SELECT 'Data sebelum diperbaiki:' as info;
-SELECT * FROM ratiing_user;
+-- 4) (Opsional) Normalisasi data lama: set titipan_id = NULL dulu (tidak diketahui)
+-- 1) Cek rating yang match prefix order tertentu (ganti :orderId)
+-- SELECT * FROM ratiing_user WHERE deskripsi LIKE CONCAT('[ORDER#', :orderId, ']%');
 
--- Perbaiki data existing:
--- Rating ID 1: seharusnya untuk jastiper ID 6
--- Rating ID 2: seharusnya untuk jastiper ID 3
+-- 2) Cek apakah user sudah rating jastiper untuk order tertentu (ganti :userId, :driverId, :orderId)
+-- SELECT COUNT(*) FROM ratiing_user 
+--   WHERE idUser = :userId AND idDriver = :driverId AND deskripsi LIKE CONCAT('[ORDER#', :orderId, ']%');
 
--- Update rating ID 1 agar field idUser = 6 (jastiper yang di-rating)
-UPDATE ratiing_user SET idUser = 6 WHERE id = 1;
-
--- Update rating ID 2 agar field idUser = 3 (jastiper yang di-rating)  
-UPDATE ratiing_user SET idUser = 3 WHERE id = 2;
-
--- Verifikasi data yang sudah diperbaiki
-SELECT 'Data setelah diperbaiki:' as info;
-SELECT * FROM ratiing_user;
-
--- Catatan: 
--- Field idUser sekarang menyimpan jastiper yang di-rating
--- Untuk tracking siapa yang memberikan rating, perlu field tambahan id_penilai
+-- 3) List semua rating per jastiper
+-- SELECT id, idUser, idDriver, rating_ketepatan, rating_pelayanan, deskripsi FROM ratiing_user WHERE idDriver = :driverId ORDER BY id DESC;
 

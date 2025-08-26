@@ -875,6 +875,13 @@ public class UserDashboardView extends Div implements BeforeEnterObserver {
             int ratingKetepatan = ratingKetepatanValue.intValue();
             int ratingPelayanan = ratingPelayananValue.intValue();
             String deskripsiText = deskripsi.getValue();
+            // Prefix deskripsi dengan ORDER ID agar bisa dicek per-order tanpa ubah schema
+            try {
+                if (t != null && t.getId() != null) {
+                    String prefix = "[ORDER#" + t.getId() + "] ";
+                    deskripsiText = (deskripsiText != null && !deskripsiText.isBlank()) ? prefix + deskripsiText : prefix;
+                }
+            } catch (Exception ignore) {}
             
             // Hitung overall rating
             double overallRating = (ratingKetepatan + ratingPelayanan) / 2.0;
@@ -934,8 +941,7 @@ public class UserDashboardView extends Div implements BeforeEnterObserver {
     // Check if user already rated a specific jastiper for a specific order
     private boolean hasUserRatedJastiper(Integer userId, Integer jastiperId, Integer titipanId) {
         try {
-            // Check if there's a rating from this user to this jastiper
-            return ratingDAO.hasUserRatedJastiper(userId, jastiperId);
+            return ratingDAO.hasUserRatedJastiperForOrder(userId, jastiperId, titipanId);
         } catch (Exception e) {
             System.err.println("Error checking if user rated jastiper: " + e.getMessage());
             return false;
@@ -945,8 +951,7 @@ public class UserDashboardView extends Div implements BeforeEnterObserver {
     // More specific check - check if user rated this specific jastiper for this specific order
     private boolean hasUserRatedJastiperForOrder(Integer userId, Integer jastiperId, Integer titipanId) {
         try {
-            // Check if there's a rating from this user to this jastiper
-            return ratingDAO.hasUserRatedJastiper(userId, jastiperId);
+            return ratingDAO.hasUserRatedJastiperForOrder(userId, jastiperId, titipanId);
         } catch (Exception e) {
             System.err.println("Error checking if user rated jastiper for order: " + e.getMessage());
             return false;
