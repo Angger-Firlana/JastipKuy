@@ -19,7 +19,9 @@ import com.vaadin.flow.component.textfield.EmailField;
 import com.vaadin.flow.component.textfield.NumberField;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.router.*;
 import com.vaadin.flow.server.VaadinSession;
 
@@ -461,7 +463,8 @@ public class JastiperView extends Div{
             grid.addColumn(u -> String.valueOf(u.ratingKetepatan) + "/10").setHeader("Rating Ketepatan").setAutoWidth(true);
             grid.addColumn(u -> String.valueOf(u.ratingPelayanan) + "/10").setHeader("Rating Pelayanan").setAutoWidth(true);
             grid.addColumn(u -> String.format("%.1f/10", (u.ratingKetepatan + u.ratingPelayanan) / 2.0)).setHeader("Rating per Order").setAutoWidth(true);
-            grid.addColumn(u -> u.komentar).setHeader("Komentar").setFlexGrow(1);
+            grid.addColumn(u -> truncateComment(u.komentar, 50)).setHeader("Komentar").setFlexGrow(1);
+            grid.addComponentColumn(u -> createViewCommentButton(u.komentar)).setHeader("Aksi").setAutoWidth(true);
             grid.addColumn(u -> u.tanggal.toString()).setHeader("Tanggal").setAutoWidth(true);
             grid.setItems(realReviews);
             grid.setAllRowsVisible(true);
@@ -570,23 +573,143 @@ public class JastiperView extends Div{
         VerticalLayout wrap = section("Edit Data");
         User user = userDAO.getUserById(SessionUtils.getUserId());
 
+        if (user == null) {
+            Div errorDiv = new Div("Gagal memuat data user");
+            errorDiv.getStyle().set("color", "red").set("text-align", "center").set("padding", "20px");
+            wrap.add(errorDiv);
+            return wrap;
+        }
+
         FormLayout form = new FormLayout();
-        TextField nama = new TextField("Nama Lengkap"); nama.setValue(user.getName());
-        EmailField email = new EmailField("Email"); email.setValue("jastiper@example.com");
-        TextField phone = new TextField("No. HP"); phone.setValue("0812-3456-7890");
-        TextField kota = new TextField("Kota"); kota.setValue("Jakarta");
-        NumberField fee = new NumberField("Fee (%)"); fee.setValue(10d);
-        TextArea bio = new TextArea("Deskripsi"); bio.setValue("Siap titip belanja dan kirim cepat.");
+        
+        // NISN Field
+        TextField nisn = new TextField("NISN");
+        nisn.setValue(user.getNisn() != null ? user.getNisn() : "");
+        nisn.setPlaceholder("Masukkan NISN");
+        nisn.setMaxLength(11);
+        
+        // Name Field
+        TextField nama = new TextField("Nama Lengkap");
+        nama.setValue(user.getName() != null ? user.getName() : "");
+        nama.setPlaceholder("Masukkan nama lengkap");
+        nama.setRequired(true);
+        nama.setMaxLength(100);
+        
+        // Email Field
+        EmailField email = new EmailField("Email");
+        email.setValue(user.getEmail() != null ? user.getEmail() : "");
+        email.setPlaceholder("contoh@email.com");
+        email.setRequired(true);
+        email.setMaxLength(100);
+        
+        // Password Fields
+        PasswordField password = new PasswordField("Password Baru");
+        password.setPlaceholder("Kosongkan jika tidak ingin mengubah password");
+        password.setRevealButtonVisible(true);
+        
+        PasswordField confirmPassword = new PasswordField("Konfirmasi Password");
+        confirmPassword.setPlaceholder("Ulangi password baru");
+        confirmPassword.setRevealButtonVisible(true);
 
-        form.add(nama, email, phone, kota, fee, bio);
-        form.setColspan(bio, 2);
-        form.setResponsiveSteps(new FormLayout.ResponsiveStep("0", 1), new FormLayout.ResponsiveStep("640px", 2));
+        // Add fields to form
+        form.add(nisn, nama, email, password, confirmPassword);
+        form.setResponsiveSteps(
+            new FormLayout.ResponsiveStep("0", 1), 
+            new FormLayout.ResponsiveStep("640px", 2)
+        );
+        form.setColspan(email, 2); // Email spans full width
 
-        Button simpan = new Button("Simpan Perubahan", VaadinIcon.CHECK.create(), e -> Notification.show("Data disimpan (dummy)."));
-        stylePrimary(simpan); simpan.getStyle().set("margin-top", "8px");
+        // Save Button
+        Button simpan = new Button("Simpan Perubahan", VaadinIcon.CHECK.create());
+        stylePrimary(simpan); 
+        simpan.getStyle().set("margin-top", "16px");
+        
+        simpan.addClickListener(e -> {
+            // Validation
+            if (nama.getValue().trim().isEmpty()) {
+                Notification.show("Nama tidak boleh kosong!", 3000, Notification.Position.MIDDLE);
+                nama.focus();
+                return;
+            }
+            
+            if (email.getValue().trim().isEmpty()) {
+                Notification.show("Email tidak boleh kosong!", 3000, Notification.Position.MIDDLE);
+                email.focus();
+                return;
+            }
+            
+            // Email format validation (basic)
+            if (!email.getValue().contains("@") || !email.getValue().contains(".")) {
+                Notification.show("Format email tidak valid!", 3000, Notification.Position.MIDDLE);
+                email.focus();
+                return;
+            }
+            
+            // Password validation if provided
+            String newPassword = password.getValue().trim();
+            String confirmPass = confirmPassword.getValue().trim();
+            
+            if (!newPassword.isEmpty() || !confirmPass.isEmpty()) {
+                if (!newPassword.equals(confirmPass)) {
+                    Notification.show("Password dan konfirmasi password tidak sama!", 3000, Notification.Position.MIDDLE);
+                    confirmPassword.focus();
+                    return;
+                }
+                
+                if (newPassword.length() < 6) {
+                    Notification.show("Password minimal 6 karakter!", 3000, Notification.Position.MIDDLE);
+                    password.focus();
+                    return;
+                }
+            }
+            
+            // Save data
+            saveUserData(user, nisn.getValue().trim(), nama.getValue().trim(), 
+                        email.getValue().trim(), newPassword);
+        });
 
         wrap.add(form, simpan);
         return wrap;
+    }
+    
+    private void saveUserData(User currentUser, String nisn, String nama, String email, String newPassword) {
+        try {
+            // Use existing password if new password is empty
+            String passwordToSave = newPassword.isEmpty() ? currentUser.getPassword() : newPassword;
+            
+            // Call UserDAO update method
+            boolean success = userDAO.update(
+                currentUser.getId(), 
+                nisn.isEmpty() ? null : nisn, 
+                nama, 
+                email, 
+                passwordToSave, 
+                currentUser.getRole() // Keep existing role
+            );
+            
+            if (success) {
+                Notification.show("Data berhasil disimpan!", 3000, Notification.Position.MIDDLE);
+                
+                // If email changed, might need to update session or reload
+                if (!email.equals(currentUser.getEmail())) {
+                    Notification.show("Email telah diubah. Silakan login ulang jika diperlukan.", 
+                                    5000, Notification.Position.MIDDLE);
+                }
+                
+                // Refresh the page to show updated data
+                UI.getCurrent().getPage().reload();
+                
+            } else {
+                Notification.show("Gagal menyimpan data. Silakan coba lagi.", 
+                                3000, Notification.Position.MIDDLE);
+            }
+            
+        } catch (Exception ex) {
+            System.err.println("Error saving user data: " + ex.getMessage());
+            ex.printStackTrace();
+            Notification.show("Terjadi kesalahan saat menyimpan data: " + ex.getMessage(), 
+                            5000, Notification.Position.MIDDLE);
+        }
     }
 
     // ------------------- HELPERS -------------------
@@ -841,6 +964,80 @@ public class JastiperView extends Div{
         return reviews;
     }
     
+    // ------------------- COMMENT HELPERS -------------------
+    
+    private String truncateComment(String comment, int maxLength) {
+        if (comment == null || comment.length() <= maxLength) {
+            return comment != null ? comment : "Tidak ada komentar";
+        }
+        return comment.substring(0, maxLength) + "...";
+    }
+    
+    private Button createViewCommentButton(String fullComment) {
+        Button viewButton = new Button("Lihat Full", VaadinIcon.EYE.create());
+        viewButton.getStyle()
+            .set("background", NAVY)
+            .set("color", WHITE)
+            .set("border", "none")
+            .set("border-radius", "6px")
+            .set("padding", "8px 12px")
+            .set("font-size", "12px")
+            .set("cursor", "pointer");
+        
+        viewButton.addClickListener(e -> showFullCommentDialog(fullComment));
+        
+        // Disable button if comment is null or empty
+        if (fullComment == null || fullComment.trim().isEmpty() || "Tidak ada komentar".equals(fullComment)) {
+            viewButton.setEnabled(false);
+            viewButton.setText("Tidak ada");
+            viewButton.getStyle().set("background", "#cccccc").set("color", "#666666");
+        }
+        
+        return viewButton;
+    }
+    
+    private void showFullCommentDialog(String fullComment) {
+        Dialog dialog = new Dialog();
+        dialog.setWidth("600px");
+        dialog.setMaxWidth("90vw");
+        dialog.setCloseOnEsc(true);
+        dialog.setCloseOnOutsideClick(true);
+        
+        VerticalLayout dialogContent = new VerticalLayout();
+        dialogContent.setPadding(true);
+        dialogContent.setSpacing(true);
+        
+        H3 title = new H3("Komentar Lengkap");
+        title.getStyle()
+            .set("margin", "0 0 16px 0")
+            .set("color", TEXT_DARK)
+            .set("font-size", "20px");
+        
+        Div commentText = new Div();
+        commentText.setText(fullComment != null && !fullComment.trim().isEmpty() ? fullComment : "Tidak ada komentar");
+        commentText.getStyle()
+            .set("background", "#f8f9fa")
+            .set("padding", "16px")
+            .set("border-radius", "8px")
+            .set("border", "1px solid #e9ecef")
+            .set("line-height", "1.6")
+            .set("color", TEXT_DARK)
+            .set("white-space", "pre-wrap")
+            .set("word-wrap", "break-word");
+        
+        Button closeButton = new Button("Tutup", VaadinIcon.CLOSE.create());
+        stylePrimary(closeButton);
+        closeButton.addClickListener(e -> dialog.close());
+        
+        HorizontalLayout buttonLayout = new HorizontalLayout(closeButton);
+        buttonLayout.setJustifyContentMode(FlexComponent.JustifyContentMode.END);
+        buttonLayout.getStyle().set("margin-top", "16px");
+        
+        dialogContent.add(title, commentText, buttonLayout);
+        dialog.add(dialogContent);
+        dialog.open();
+    }
+
     // ------------------- MODELS -------------------
     private String formatRupiah(Long amount) {
         if (amount == null) return "-";
