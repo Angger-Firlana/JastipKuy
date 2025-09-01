@@ -679,7 +679,7 @@ public class JastiperView extends Div{
             
             // Call UserDAO update method
             boolean success = userDAO.update(
-                currentUser.getId(), 
+                SessionUtils.getUserId(),
                 nisn.isEmpty() ? null : nisn, 
                 nama, 
                 email, 

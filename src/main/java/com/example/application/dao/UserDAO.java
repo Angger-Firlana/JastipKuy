@@ -124,6 +124,7 @@ public class UserDAO {
 
             if (rs.next()) {
                 User logUser = new User();
+                logUser.setId(rs.getInt("id"));
                 logUser.setNisn(rs.getString("nisn")); // tambahin ini
                 logUser.setRole(rs.getString("role"));
                 logUser.setName(rs.getString("name"));
