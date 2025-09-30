@@ -218,12 +218,14 @@ public class AdminView extends VerticalLayout {
 
         int totalUser = userDAO.getTotalUsers();
         int totalOrder = titipanDAO.getOrderCountThisMonth();
-        long pendapatan = titipanDAO.getPendapatanThisMonth();
+        long pendapatan = titipanDAO.getPendapatanThisMonth(); // total ongkir bulan ini
+        long totalBiaya = titipanDAO.getTotalBiayaThisMonth(); // barang + ongkir (SELESAI)
 
         statsGrid.add(
                 createStatCard("Total User", String.valueOf(totalUser), VaadinIcon.USERS, "primary"),
                 createStatCard("Order Bulan Ini", String.valueOf(totalOrder), VaadinIcon.CART, "success"),
-                createStatCard("Pendapatan", formatRupiah(pendapatan), VaadinIcon.MONEY, "error")
+                createStatCard("Total Ongkir", formatRupiah(pendapatan), VaadinIcon.MONEY, "error"),
+                createStatCard("Total Biaya", formatRupiah(totalBiaya), VaadinIcon.MONEY, "success")
         );
 
 

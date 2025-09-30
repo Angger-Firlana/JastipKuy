@@ -1,8 +1,10 @@
 package com.example.application.view.user;
 
 import com.example.application.dao.*;
+import com.example.application.model.Location;
 import com.example.application.model.Titipan;
 import com.example.application.model.User;
+import com.example.application.util.ShippingCalculator;
 import com.example.application.session.SessionUtils;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.UI;
@@ -36,7 +38,7 @@ import java.util.stream.Collectors;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.combobox.ComboBox;
 
-@PageTitle("JastipKuy • Dashboard")
+@PageTitle("JastipKuy - Dashboard")
 @Route("jastiper")
 @Uses(Icon.class)
 public class JastiperView extends Div{
@@ -45,6 +47,7 @@ public class JastiperView extends Div{
     private final UserDAO userDAO = new UserDAO();
     private final RatingDAO ratingDAO = new RatingDAO();
     private final LaporanDAO laporanDAO = new LaporanDAO();
+    private final LocationDAO locationDAO = new LocationDAO();
 
     private static final String NAVY      = "#11284B";
     private static final String SLATE     = "#34465B";
@@ -57,6 +60,7 @@ public class JastiperView extends Div{
 
     private final VerticalLayout content = new VerticalLayout();
     private final Map<String, Component> pages = new LinkedHashMap<>();
+    private final Map<String, Location> locationMap = new HashMap<>();
     private String currentPesananStatusFilter = "Belum Selesai";
     private String currentKeywordFilter = "";
     private ComboBox<String> keywordBox;
@@ -83,6 +87,23 @@ public class JastiperView extends Div{
         }else{
             UI.getCurrent().navigate("login");
         }
+
+        try {
+            List<Location> allLocations = locationDAO.findAll();
+            if (allLocations != null) {
+                for (Location location : allLocations) {
+                    if (location == null) continue;
+                    String name = location.getName();
+                    if (name == null) continue;
+                    String trimmed = name.trim();
+                    if (trimmed.isEmpty()) continue;
+                    locationMap.put(trimmed.toLowerCase(Locale.ROOT), location);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to load locations: " + e.getMessage());
+        }
+
         // ======= TOP BAR =======
         HorizontalLayout topBar = new HorizontalLayout();
         topBar.setWidthFull();
@@ -324,9 +345,12 @@ public class JastiperView extends Div{
                     .set("box-shadow", "0 2px 6px rgba(0,0,0,0.2)");
 
             // Detail fields
+            ShippingCalculator.ShippingInfo shippingInfo = shippingInfoForOrder(t);
+            String distanceLabel = shippingInfo.distanceMeters() > 0 ? shippingInfo.distanceMeters() + " m" : "0 m";
             Component namaBarang = infoField("Nama Barang", t.getNama_barang());
-            Component lokasi = infoField("Lokasi Jemput - Antar", t.getLokasi_jemput() + " → " + t.getLokasi_antar());
+            Component lokasi = infoField("Lokasi Jemput - Antar", (t.getLokasi_jemput() != null ? t.getLokasi_jemput() : "-") + " -> " + (t.getLokasi_antar() != null ? t.getLokasi_antar() : "-"));
             Component harga = infoField("Biaya Barang", formatRupiah(t.getHarga_estimasi()));
+            Component ongkir = infoField("Ongkir", formatRupiah(shippingInfo.finalCost()) + " (" + distanceLabel + ")");
 
             // Status badge
             Span statusBadge = new Span(t.getStatus());
@@ -377,7 +401,7 @@ public class JastiperView extends Div{
                 statusBadge.getStyle().set("background", "#BE3D2A").set("color", "white");
             }
 
-            card.add(namaBarang, lokasi, harga, statusBadge, actions);
+            card.add(namaBarang, lokasi, harga, ongkir, statusBadge, actions);
             container.add(card);
         }
     }
@@ -837,15 +861,24 @@ public class JastiperView extends Div{
             if (completedOrders != null) {
                 for (Titipan order : completedOrders) {
                     if ("SELESAI".equalsIgnoreCase(order.getStatus())) {
-                        long pendapatan = 2000;
-                        LocalDate tanggal = order.getCreated_at().toInstant()
-                                .atZone(java.time.ZoneId.systemDefault())
-                                .toLocalDate();
+                        ShippingCalculator.ShippingInfo info = shippingInfoForOrder(order);
+                        long pendapatan = info.finalCost();
+                        int distance = info.distanceMeters();
+                        LocalDate tanggal = order.getCreated_at() != null
+                                ? order.getCreated_at().toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                                : LocalDate.now();
+                        String namaBarang = order.getNama_barang() != null && !order.getNama_barang().isBlank()
+                                ? order.getNama_barang()
+                                : "Barang";
+                        String deskripsi = "Upah " + namaBarang;
+                        if (distance > 0) {
+                            deskripsi += " (" + distance + " m)";
+                        }
                         Pendapatan p = new Pendapatan(
-                            tanggal,
-                            "#" + order.getId(),
-                            "Upah " + (order.getNama_barang() != null ? order.getNama_barang() : "Barang"),
-                            pendapatan
+                                tanggal,
+                                "#" + order.getId(),
+                                deskripsi,
+                                pendapatan
                         );
                         pendapatanList.add(p);
                     }
@@ -856,7 +889,7 @@ public class JastiperView extends Div{
         }
         return pendapatanList;
     }
-    
+
     // ------------------- CHART DATA -------------------
     
     private List<ChartData> getChartData() {
@@ -1039,6 +1072,34 @@ public class JastiperView extends Div{
     }
 
     // ------------------- MODELS -------------------
+    private Location getLocationByName(String name) {
+        if (name == null) {
+            return null;
+        }
+        String key = name.trim();
+        if (key.isEmpty()) {
+            return null;
+        }
+        String lookupKey = key.toLowerCase(Locale.ROOT);
+        Location cached = locationMap.get(lookupKey);
+        if (cached != null) {
+            return cached;
+        }
+        Location fromDb = locationDAO.findByName(key).orElse(null);
+        if (fromDb != null) {
+            locationMap.put(lookupKey, fromDb);
+        }
+        return fromDb;
+    }
+
+    private ShippingCalculator.ShippingInfo shippingInfoForOrder(Titipan order) {
+        if (order == null) {
+            return ShippingCalculator.calculate(null, null);
+        }
+        Location from = getLocationByName(order.getLokasi_jemput());
+        Location to = getLocationByName(order.getLokasi_antar());
+        return ShippingCalculator.calculate(from, to);
+    }
     private String formatRupiah(Long amount) {
         if (amount == null) return "-";
         return rupiah.format(amount).replace(",00", "");
@@ -1050,11 +1111,49 @@ public class JastiperView extends Div{
     private long getCurrentMonthEarnings() {
         Integer userId = SessionUtils.getUserId();
         Calendar cal = Calendar.getInstance();
-        int month = cal.get(Calendar.MONTH) + 1; // Calendar.MONTH is zero-based
+        int month = cal.get(Calendar.MONTH) + 1;
         int year = cal.get(Calendar.YEAR);
-        int successfulOrders = countSuccessfulOrdersByMonth(userId, month, year);
-        long totalEarnings = successfulOrders * 2000L;
-        return totalEarnings;
+
+        try {
+            List<Titipan> allOrders = titipanDAO.getOrdersByJastiper(userId);
+            if (allOrders == null) {
+                return 0L;
+            }
+            Calendar orderCal = Calendar.getInstance();
+            long total = 0L;
+            for (Titipan order : allOrders) {
+                if (order.getCreated_at() == null || !"SELESAI".equalsIgnoreCase(order.getStatus())) {
+                    continue;
+                }
+                orderCal.setTime(order.getCreated_at());
+                boolean matchesMonth = orderCal.get(Calendar.MONTH) + 1 == month;
+                boolean matchesYear = orderCal.get(Calendar.YEAR) == year;
+                if (matchesMonth && matchesYear) {
+                    total += shippingInfoForOrder(order).finalCost();
+                }
+            }
+            return total;
+        } catch (Exception e) {
+            System.err.println("Error calculating current month earnings: " + e.getMessage());
+            return 0L;
+        }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

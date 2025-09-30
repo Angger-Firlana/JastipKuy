@@ -2,6 +2,8 @@ package com.example.application.dao;
 
 import com.example.application.connection.Conn;
 import com.example.application.model.Titipan;
+import com.example.application.model.Location;
+import com.example.application.util.ShippingCalculator;
 
 import java.sql.*;
 import java.util.ArrayList;
@@ -94,21 +96,68 @@ public class TitipanDAO {
     }
 
     public long getPendapatanThisMonth() {
-        String query = "SELECT SUM(harga_estimasi) FROM titipan " +
+        // Hitung total ongkir semua order SELESAI pada bulan berjalan (berbasis jarak)
+        long total = 0L;
+        LocationDAO locationDAO = new LocationDAO();
+        String sql = "SELECT lokasi_jemput, lokasi_antar FROM titipan " +
                 "WHERE status = 'SELESAI' " +
                 "AND MONTH(created_at) = MONTH(CURRENT_DATE()) " +
                 "AND YEAR(created_at) = YEAR(CURRENT_DATE())";
-        try {
-            ps = conn.prepareStatement(query);
-            rs = ps.executeQuery();
-            if (rs.next()) {
-                BigDecimal result = rs.getBigDecimal(1);
-                return result != null ? result.longValue() : 0L;
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                String fromName = rs.getString("lokasi_jemput");
+                String toName = rs.getString("lokasi_antar");
+                Location from = locationDAO.findByName(fromName).orElse(null);
+                Location to = locationDAO.findByName(toName).orElse(null);
+                ShippingCalculator.ShippingInfo info = ShippingCalculator.calculate(from, to);
+                total += info.finalCost();
             }
-        } catch (SQLException se) {
-            System.out.println("getPendapatanThisMonth Error: " + se);
+        } catch (SQLException e) {
+            System.out.println("getPendapatanThisMonth Error: " + e.getMessage());
         }
-        return 0;
+        return total;
+    }
+
+    public long getTotalBiayaThisMonth() {
+        // Total biaya sistem = harga_estimasi (barang) + ongkir berbasis jarak
+        long total = 0L;
+        LocationDAO locationDAO = new LocationDAO();
+        String sql = "SELECT harga_estimasi, lokasi_jemput, lokasi_antar FROM titipan " +
+                "WHERE status = 'SELESAI' " +
+                "AND MONTH(created_at) = MONTH(CURRENT_DATE()) " +
+                "AND YEAR(created_at) = YEAR(CURRENT_DATE())";
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                java.math.BigDecimal barang = rs.getBigDecimal("harga_estimasi");
+                long hargaBarang = barang != null ? barang.longValue() : 0L;
+                String fromName = rs.getString("lokasi_jemput");
+                String toName = rs.getString("lokasi_antar");
+                Location from = locationDAO.findByName(fromName).orElse(null);
+                Location to = locationDAO.findByName(toName).orElse(null);
+                ShippingCalculator.ShippingInfo info = ShippingCalculator.calculate(from, to);
+                total += hargaBarang + info.finalCost();
+            }
+        } catch (SQLException e) {
+            System.out.println("getTotalBiayaThisMonth Error: " + e.getMessage());
+        }
+        return total;
+    }
+
+    // Tambahan utilitas: ambil semua titipan selesai bulan ini
+    public List<Titipan> getCompletedOrdersThisMonth() {
+        List<Titipan> list = new ArrayList<>();
+        String sql = "SELECT * FROM titipan WHERE status='SELESAI' " +
+                "AND MONTH(created_at) = MONTH(CURRENT_DATE()) " +
+                "AND YEAR(created_at) = YEAR(CURRENT_DATE()) ORDER BY created_at DESC";
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) list.add(mapRow(rs));
+        } catch (SQLException e) {
+            System.out.println("getCompletedOrdersThisMonth Error: " + e.getMessage());
+        }
+        return list;
     }
 
     public int insertTitipanReturnId(Titipan t) {
